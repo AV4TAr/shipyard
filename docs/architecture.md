@@ -252,7 +252,7 @@ graph LR
 |---|---|---|
 | Intent | Built | 21 |
 | Sandbox | Built (simulated + OpenSandbox backend) | 46 |
-| Validation | Built (simulated signals) | 26 |
+| Validation | Built (real + simulated runners) | 51 |
 | Trust/Risk | Built | 27 |
 | Coordination | Built | 24 |
 | Pipeline | Built | 17 |
@@ -260,14 +260,18 @@ graph LR
 | Constraints | Built | 29 |
 | CLI | Built | 45 |
 | Routing | Built | 39 |
-| **Total** | | **311** |
+| API (Command Center) | Built | 15 |
+| Storage | Built (memory + SQLite) | 63 |
+| LLM | Built (OpenRouter) | 22 |
+| SDK | Built | 25 |
+| Notifications | Built | 45 |
+| Projects | Built | 52 |
+| **Total** | | **558** |
 
 ## What's Not Built Yet
 
-See [todo.md](./todo.md) for the full list. Key gaps:
+See [todo.md](./todo.md) for the full list. Key remaining gaps:
 
-- **Project Layer** — sits above Goals. Raw idea → project → milestones → goals → tasks
-- **Real Infrastructure** — sandbox has OpenSandbox backend (requires `opensandbox-server`), validation signals are simulated
-- **Persistent Storage** — everything is in-memory
-- **Agent SDK** — protocol for external agents to connect
-- **LLM Integration** — goal decomposition, intent alignment, semantic merge all need LLM calls
+- **Integration wiring** — storage, LLM decomposer, and notifications need to be wired into existing managers
+- **Behavioral diffing** — traffic replay for semantic change detection
+- **UI polish** — structured feedback viewer, config editor, project views in frontend

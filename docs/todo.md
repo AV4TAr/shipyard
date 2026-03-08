@@ -30,20 +30,22 @@ The primary interface between the human operator (air traffic controller) and th
 - Constraint definitions (architectural rules agents must follow)
 - Priority-based task assignment to agents
 
+## Completed
+
+- [x] **Command Center (Web UI)** — FastAPI backend (`src/api/`) + self-contained SPA frontend (`src/api/static/index.html`). 6 views: dashboard, goals, pipeline, agents, queue, constraints. Dark theme, WebSocket, auto-refresh. Same `CLIRuntime` underneath — CLI and UI are interchangeable.
+- [x] **Project Layer** — `src/projects/` — Project → Milestone → Goal hierarchy. Full lifecycle (draft → planning → active → completed). Rule-based planner generates 3-phase milestones (Foundation, Implementation, Polish).
+- [x] **LLM Integration** — `src/llm/` — OpenRouter client (stdlib only), LLM goal decomposer with fallback, intent alignment checker, semantic merge analyzer.
+- [x] **Persistent Storage** — `src/storage/` — Repository pattern with memory + SQLite backends. JSON-blob storage with indexed columns, factory pattern.
+- [x] **Webhook Notifications** — `src/notifications/` — Event dispatcher with webhook + Slack channels. HMAC signing, Block Kit formatting. 13 event types.
+- [x] **Agent SDK / Protocol** — `src/sdk/` — Protocol models, client SDK (stdlib only), FastAPI routes. Full lifecycle: register → get tasks → claim → submit → get feedback.
+- [x] Real Docker/K8s sandbox integration — OpenSandbox backend (`src/sandbox/backends.py`). Set `OPENSANDBOX_SERVER_URL` env var to activate.
+- [x] Real static analysis integration — `src/validation/real_runners.py` — ruff JSON output parsing with severity mapping.
+- [x] Real security scanning integration — `src/validation/real_runners.py` — bandit JSON parsing with severity mapping.
+- [x] LLM-based intent alignment checking — `src/llm/alignment.py`
+- [x] LLM-based semantic merge analysis — `src/llm/merge_analyzer.py`
+
 ## High Priority
 
-- [ ] **Command Center (Web UI)** — browser-based control panel for the human air traffic controller. Everything the CLI can do, plus real-time visuals. The human should never *need* the terminal to operate the system.
-  - **Dashboard** — live overview: active pipeline runs, pending approvals count, agent activity, deploy queue depth, system health
-  - **Pipeline Monitor** — view each run's 5-stage progress in real time, expand stages to see logs, validation signals, risk scores
-  - **Escalation / Approval Queue** — review HIGH/CRITICAL risk changes, see the diff + intent + validation results, approve/reject with structured feedback
-  - **Goal Management** — create, activate, cancel goals; see decomposition into tasks; track progress per goal
-  - **Constraint Editor** — view/edit the architectural constitution (`constraints.yaml`), severity levels, add/remove rules
-  - **Agent Profiles** — trust scores over time, domain-specific trust breakdown, deployment history, active claims
-  - **Configuration** — edit risk thresholds, signal weights, trust parameters, sandbox limits (currently in `configs/default.yaml`)
-  - **Deploy Queue** — reorder, pause, remove entries; see canary status for active deploys
-  - **Structured Feedback Viewer** — browse feedback history per agent, see what the system told agents and how they responded
-  - **Tech:** FastAPI backend exposing the same `CLIRuntime` API over REST/WebSocket, lightweight frontend (React or similar)
-  - **Design principle:** the UI is a *window into the system*, not a separate system. Same `CLIRuntime`, same data, same rules. CLI and UI are interchangeable.
 - [ ] **Agent Selection / Routing** — smart assignment of tasks to the best agent. This is a pipeline-level decision that considers:
   - Capability match (does the agent have the right skills?)
   - Domain-specific trust (trusted for API work but not DB migrations?)
@@ -52,21 +54,16 @@ The primary interface between the human operator (air traffic controller) and th
   - Cost/speed tradeoffs
   - Requires an Agent Registry (capabilities, specializations, status) and a Task Router (matching algorithm)
   - This is a key differentiator — traditional CI/CD never had to solve "who should do this work"
-- [ ] **Project Layer** — sits above Goals. Handles how work actually starts: raw idea/problem → project with scope, milestones, phases → goals → tasks
-- [ ] Integration with real LLM for goal decomposition — replace placeholder logic with actual LLM calls to break goals into concrete, actionable tasks
-- [ ] Persistent storage — replace in-memory dicts with a real database for intents, runs, agent profiles, goals, and constraints
-- [ ] Webhook notifications — Slack, email, and custom webhook support for approvals, failures, and anomalies
-- [ ] Agent SDK / protocol — define how external agents connect to this system, authenticate, declare intents, and receive structured feedback
+- [ ] **Storage Integration** — wire `src/storage/` repositories into existing managers (GoalManager, TrustTracker, IntentRegistry, PipelineOrchestrator) so data persists across restarts
+- [ ] **LLM Decomposer Integration** — wire `src/llm/decomposer.py` into GoalManager as an alternative to the rule-based decomposer
+- [ ] **Notification Integration** — wire `src/notifications/` EventDispatcher into pipeline stages so events fire automatically
 
 ## Medium Priority
 
-- [x] Real Docker/K8s sandbox integration — OpenSandbox backend added (`src/sandbox/backends.py`). Set `OPENSANDBOX_SERVER_URL` env var to activate. Simulated backend remains the default.
 - [ ] OpenSandbox production hardening — resource usage metrics, JSON report parsing via `sandbox.files.read_file()`, timeout enforcement
-- [ ] Real static analysis integration (ruff, mypy, semgrep)
-- [ ] Real security scanning integration (bandit, trivy)
 - [ ] Behavioral diffing with traffic replay
-- [ ] LLM-based intent alignment checking
-- [ ] LLM-based semantic merge analysis
+- [ ] Command Center UI polish — structured feedback viewer, configuration editor, constraint editing
+- [ ] Project Layer API routes + frontend views
 
 ## Low Priority
 
