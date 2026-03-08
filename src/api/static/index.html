@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-CICD Command Center</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --bg-hover: #334155;
+  --bg-input: #0f172a;
+  --border: #334155;
+  --border-subtle: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --green: #22c55e;
+  --green-dim: rgba(34, 197, 94, 0.15);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245, 158, 11, 0.15);
+  --red: #ef4444;
+  --red-dim: rgba(239, 68, 68, 0.15);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59, 130, 246, 0.15);
+  --purple: #a855f7;
+  --purple-dim: rgba(168, 85, 247, 0.15);
+  --gray: #64748b;
+  --gray-dim: rgba(100, 116, 139, 0.15);
+  --radius: 8px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-lg: 0 4px 6px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2);
+  --transition: 150ms ease;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== Layout ===== */
+.app-header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 1.1rem;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+  margin-right: 2rem;
+  flex-shrink: 0;
+}
+.logo svg { width: 28px; height: 28px; }
+.logo-dot { color: var(--green); }
+
+nav {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  flex: 1;
+}
+nav button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition);
+  white-space: nowrap;
+  position: relative;
+}
+nav button:hover { color: var(--text-primary); background: var(--bg-hover); }
+nav button.active {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+nav button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0.5rem;
+  right: 0.5rem;
+  height: 2px;
+  background: var(--blue);
+  border-radius: 1px;
+}
+
+.header-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+main {
+  flex: 1;
+  padding: 1.5rem;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ===== Metric Cards ===== */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color var(--transition), transform var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.metric-card:hover { border-color: var(--text-muted); transform: translateY(-1px); }
+.metric-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+}
+.metric-card.green::before { background: var(--green); }
+.metric-card.amber::before { background: var(--amber); }
+.metric-card.red::before { background: var(--red); }
+.metric-card.blue::before { background: var(--blue); }
+
+.metric-icon {
+  width: 36px; height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+.metric-icon.green { background: var(--green-dim); color: var(--green); }
+.metric-icon.amber { background: var(--amber-dim); color: var(--amber); }
+.metric-icon.red { background: var(--red-dim); color: var(--red); }
+.metric-icon.blue { background: var(--blue-dim); color: var(--blue); }
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+.metric-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ===== Tables ===== */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.data-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.data-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+.data-table tbody tr { transition: background var(--transition); }
+.data-table tbody tr:hover { background: var(--bg-hover); }
+.data-table tbody tr.expandable { cursor: pointer; }
+
+/* ===== Badges ===== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge-green { background: var(--green-dim); color: var(--green); }
+.badge-amber { background: var(--amber-dim); color: var(--amber); }
+.badge-red { background: var(--red-dim); color: var(--red); }
+.badge-blue { background: var(--blue-dim); color: var(--blue); }
+.badge-purple { background: var(--purple-dim); color: var(--purple); }
+.badge-gray { background: var(--gray-dim); color: var(--gray); }
+
+/* ===== Buttons ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all var(--transition);
+  border: 1px solid transparent;
+}
+.btn-primary { background: var(--blue); color: white; border-color: var(--blue); }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-success { background: var(--green); color: white; border-color: var(--green); }
+.btn-success:hover { filter: brightness(1.1); }
+.btn-danger { background: var(--red); color: white; border-color: var(--red); }
+.btn-danger:hover { filter: brightness(1.1); }
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+.btn-sm { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
+
+/* ===== Cards ===== */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+.card-body { padding: 1.25rem; }
+
+/* ===== Agent Cards ===== */
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+.agent-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: border-color var(--transition);
+  cursor: pointer;
+}
+.agent-card:hover { border-color: var(--text-muted); }
+.agent-card-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+.agent-avatar {
+  width: 40px; height: 40px;
+  border-radius: var(--radius);
+  background: var(--blue-dim);
+  color: var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.agent-name { font-weight: 600; }
+.agent-id { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted); }
+
+.trust-bar {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 0.5rem;
+}
+.trust-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+.agent-stats {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+}
+.agent-stat-label { color: var(--text-muted); font-size: 0.75rem; }
+.agent-stat-value { font-weight: 600; font-family: var(--font-mono); }
+
+.agent-detail { display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.agent-card.expanded .agent-detail { display: block; }
+.domain-trust { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-size: 0.85rem; }
+.domain-trust-label { color: var(--text-secondary); }
+
+/* ===== Progress bar ===== */
+.progress-bar {
+  height: 6px;
+  background: var(--bg-primary);
+  border-radius: 3px;
+  overflow: hidden;
+  flex: 1;
+  margin: 0 0.5rem;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+/* ===== Modals ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+.modal-overlay.active { opacity: 1; pointer-events: auto; }
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-title { font-weight: 600; font-size: 1.1rem; }
+.modal-close {
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 1.2rem; padding: 0.25rem;
+  transition: color var(--transition);
+}
+.modal-close:hover { color: var(--text-primary); }
+.modal-body { padding: 1.5rem; }
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ===== Forms ===== */
+.form-group { margin-bottom: 1rem; }
+.form-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.4rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  transition: border-color var(--transition);
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+.form-textarea { resize: vertical; min-height: 80px; }
+.form-hint { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+/* ===== Activity Feed ===== */
+.activity-feed { list-style: none; }
+.activity-item {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.85rem;
+  align-items: flex-start;
+}
+.activity-item:last-child { border-bottom: none; }
+.activity-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+.activity-time {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ===== Expandable Rows ===== */
+.expand-row { display: none; }
+.expand-row.active { display: table-row; }
+.expand-content {
+  padding: 1rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+}
+
+/* ===== Queue List ===== */
+.queue-list { list-style: none; }
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background var(--transition);
+}
+.queue-item:hover { background: var(--bg-hover); }
+.queue-item:last-child { border-bottom: none; }
+.queue-position {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  width: 2rem;
+  text-align: center;
+}
+
+/* ===== ID display ===== */
+.mono { font-family: var(--font-mono); font-size: 0.85rem; }
+.truncate-id {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* ===== Empty State ===== */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+.empty-state-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+.empty-state-text { font-size: 0.95rem; }
+
+/* ===== Inline Actions ===== */
+.inline-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.inline-input {
+  padding: 0.3rem 0.5rem;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  width: 200px;
+}
+.inline-input:focus { outline: none; border-color: var(--blue); }
+
+/* ===== Toast ===== */
+.toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.toast {
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  box-shadow: var(--shadow-lg);
+  animation: slideIn 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 360px;
+}
+.toast-success { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+.toast-error { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+.toast-info { background: var(--blue-dim); color: var(--blue); border: 1px solid var(--blue); }
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .agent-grid { grid-template-columns: 1fr; }
+  nav { gap: 0; }
+  nav button { padding: 0.5rem 0.6rem; font-size: 0.8rem; }
+  main { padding: 1rem; }
+  .data-table { font-size: 0.8rem; }
+  .data-table th, .data-table td { padding: 0.5rem 0.6rem; }
+}
+@media (max-width: 480px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+  .logo span { display: none; }
+}
+
+/* ===== Stage Pipeline visual ===== */
+.pipeline-stages {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+.pipeline-stage {
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.pipeline-stage.completed { background: var(--green-dim); color: var(--green); }
+.pipeline-stage.active { background: var(--blue-dim); color: var(--blue); animation: pulse 1.5s infinite; }
+.pipeline-stage.pending { background: var(--gray-dim); color: var(--gray); }
+.pipeline-stage.failed { background: var(--red-dim); color: var(--red); }
+.stage-arrow { color: var(--text-muted); font-size: 0.7rem; }
+
+/* Section headers */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header class="app-header">
+  <div class="logo">
+    <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="28" y="40" width="8" height="18" rx="2" fill="#3b82f6"/>
+      <rect x="22" y="54" width="20" height="4" rx="2" fill="#3b82f6"/>
+      <circle cx="32" cy="28" r="4" fill="#22c55e"/>
+      <path d="M32 28 Q44 16 48 8" stroke="#22c55e" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M38 22 a12 12 0 0 1 6-10" stroke="#22c55e" stroke-width="1.5" fill="none" opacity="0.7" stroke-linecap="round"/>
+      <path d="M42 18 a16 16 0 0 1 4-8" stroke="#22c55e" stroke-width="1" fill="none" opacity="0.4" stroke-linecap="round"/>
+    </svg>
+    <span>Command Center<span class="logo-dot">.</span></span>
+  </div>
+  <nav id="main-nav">
+    <button data-page="dashboard" class="active">Dashboard</button>
+    <button data-page="goals">Goals</button>
+    <button data-page="pipeline">Pipeline</button>
+    <button data-page="agents">Agents</button>
+    <button data-page="queue">Queue</button>
+    <button data-page="constraints">Constraints</button>
+  </nav>
+  <div class="header-status">
+    <div class="status-dot" id="connection-dot"></div>
+    <span id="connection-label">Connected</span>
+  </div>
+</header>
+
+<!-- ===== Main Content ===== -->
+<main id="app"></main>
+
+<!-- ===== Modal Container ===== -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<!-- ===== Toast Container ===== -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+// ===== API Client =====
+const api = {
+  async get(path) {
+    try {
+      const r = await fetch(`/api${path}`);
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || r.statusText);
+      }
+      return r.json();
+    } catch (e) {
+      if (e.message === 'Failed to fetch') throw new Error('Connection lost');
+      throw e;
+    }
+  },
+  async post(path, body = {}) {
+    try {
+      const r = await fetch(`/api${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || r.statusText);
+      }
+      return r.json();
+    } catch (e) {
+      if (e.message === 'Failed to fetch') throw new Error('Connection lost');
+      throw e;
+    }
+  },
+};
+
+// ===== State =====
+let currentPage = 'dashboard';
+let refreshInterval = null;
+let wsConnection = null;
+
+// ===== Router =====
+const pages = {
+  dashboard: renderDashboard,
+  goals: renderGoals,
+  pipeline: renderPipeline,
+  agents: renderAgents,
+  queue: renderQueue,
+  constraints: renderConstraints,
+};
+
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('#main-nav button').forEach(b => {
+    b.classList.toggle('active', b.dataset.page === page);
+  });
+  pages[page]();
+  startAutoRefresh();
+}
+
+// Nav click handlers
+document.querySelectorAll('#main-nav button').forEach(btn => {
+  btn.addEventListener('click', () => navigate(btn.dataset.page));
+});
+
+// ===== Auto-refresh =====
+function startAutoRefresh() {
+  if (refreshInterval) clearInterval(refreshInterval);
+  refreshInterval = setInterval(() => {
+    if (currentPage === 'dashboard') renderDashboard();
+  }, 5000);
+}
+
+// ===== Toast Notifications =====
+function toast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => { el.remove(); }, 4000);
+}
+
+// ===== Modal =====
+function showModal(html) {
+  document.getElementById('modal-content').innerHTML = html;
+  document.getElementById('modal-overlay').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('active');
+}
+
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+// ===== Utilities =====
+function truncateId(id) {
+  if (!id) return '---';
+  return id.substring(0, 8);
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '---';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  return `${diffDay}d ago`;
+}
+
+function statusBadge(status) {
+  const colors = {
+    active: 'green', running: 'green', completed: 'gray', success: 'green',
+    draft: 'blue', pending: 'blue', queued: 'blue',
+    failed: 'red', rejected: 'red', cancelled: 'red',
+    blocked: 'amber', 'human-approval': 'amber',
+    'in_progress': 'green', 'auto-deploy': 'green',
+    'agent-review': 'purple', canary: 'purple',
+  };
+  const color = colors[(status || '').toLowerCase()] || 'gray';
+  return `<span class="badge badge-${color}">${escapeHtml(status || 'unknown')}</span>`;
+}
+
+function priorityBadge(priority) {
+  const colors = { critical: 'red', high: 'amber', medium: 'blue', low: 'gray' };
+  const color = colors[(priority || '').toLowerCase()] || 'gray';
+  return `<span class="badge badge-${color}">${escapeHtml(priority || 'medium')}</span>`;
+}
+
+function severityBadge(severity) {
+  const colors = { must: 'red', should: 'amber', prefer: 'blue' };
+  const color = colors[(severity || '').toLowerCase()] || 'gray';
+  return `<span class="badge badge-${color}">${escapeHtml(severity || '---')}</span>`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function trustColor(score) {
+  if (score >= 0.7) return 'var(--green)';
+  if (score >= 0.4) return 'var(--amber)';
+  return 'var(--red)';
+}
+
+function healthColor(data) {
+  if (!data) return 'blue';
+  if (data.pending_approvals > 3 || data.deploy_queue_length > 5) return 'red';
+  if (data.pending_approvals > 0 || data.deploy_queue_length > 2) return 'amber';
+  return 'green';
+}
+
+const app = document.getElementById('app');
+
+// ===== Dashboard =====
+async function renderDashboard() {
+  let data;
+  try {
+    data = await api.get('/status');
+  } catch (e) {
+    app.innerHTML = `<div class="empty-state"><div class="empty-state-icon">!</div><div class="empty-state-text">Could not load dashboard: ${escapeHtml(e.message)}</div></div>`;
+    return;
+  }
+
+  const health = healthColor(data);
+  const healthLabel = health === 'green' ? 'Healthy' : health === 'amber' ? 'Attention' : 'Critical';
+
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Dashboard</h1>
+    </div>
+    <div class="metrics-grid">
+      <div class="metric-card ${data.active_goals > 0 ? 'green' : 'blue'}">
+        <div class="metric-icon green">&#9678;</div>
+        <div class="metric-value">${data.active_goals || 0}</div>
+        <div class="metric-label">Active Goals</div>
+      </div>
+      <div class="metric-card ${data.pipeline_runs_in_progress > 0 ? 'blue' : 'green'}">
+        <div class="metric-icon blue">&#9654;</div>
+        <div class="metric-value">${data.pipeline_runs_in_progress || 0}</div>
+        <div class="metric-label">Pipeline Runs</div>
+      </div>
+      <div class="metric-card ${data.pending_approvals > 0 ? 'amber' : 'green'}">
+        <div class="metric-icon amber">&#9888;</div>
+        <div class="metric-value">${data.pending_approvals || 0}</div>
+        <div class="metric-label">Pending Approvals</div>
+      </div>
+      <div class="metric-card blue">
+        <div class="metric-icon blue">&#9881;</div>
+        <div class="metric-value">${data.active_agents || 0}<span style="font-size:1rem;color:var(--text-muted)">/${data.agent_count || 0}</span></div>
+        <div class="metric-label">Active Agents</div>
+      </div>
+      <div class="metric-card ${data.deploy_queue_length > 0 ? 'amber' : 'green'}">
+        <div class="metric-icon ${data.deploy_queue_length > 2 ? 'amber' : 'green'}">&#9776;</div>
+        <div class="metric-value">${data.deploy_queue_length || 0}</div>
+        <div class="metric-label">Deploy Queue</div>
+      </div>
+      <div class="metric-card ${health}">
+        <div class="metric-icon ${health}">&#9829;</div>
+        <div class="metric-value" style="font-size:1.5rem">${healthLabel}</div>
+        <div class="metric-label">System Health</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Activity</span>
+      </div>
+      <div class="card-body" id="activity-feed-body">
+        <div class="empty-state"><div class="empty-state-text">Loading activity...</div></div>
+      </div>
+    </div>
+  `;
+
+  // Load recent pipeline runs for the activity feed
+  try {
+    const runs = await api.get('/runs?limit=10');
+    const feedBody = document.getElementById('activity-feed-body');
+    if (!runs || runs.length === 0) {
+      feedBody.innerHTML = '<div class="empty-state"><div class="empty-state-text">No recent activity</div></div>';
+    } else {
+      feedBody.innerHTML = `<ul class="activity-feed">${runs.map(r => {
+        const dotColor = r.status === 'success' ? 'var(--green)' :
+                         r.status === 'failed' ? 'var(--red)' :
+                         r.status === 'blocked' ? 'var(--amber)' : 'var(--blue)';
+        return `<li class="activity-item">
+          <div class="activity-dot" style="background:${dotColor}"></div>
+          <div>
+            <span class="mono">${truncateId(r.run_id || r.id)}</span>
+            ${statusBadge(r.status)}
+            <span style="color:var(--text-secondary);margin-left:0.5rem">
+              ${r.current_stage ? 'at ' + escapeHtml(r.current_stage) : ''}
+              ${r.agent_id ? ' by ' + truncateId(r.agent_id) : ''}
+            </span>
+          </div>
+          <span class="activity-time">${formatDate(r.started_at || r.created_at)}</span>
+        </li>`;
+      }).join('')}</ul>`;
+    }
+  } catch (e) {
+    const feedBody = document.getElementById('activity-feed-body');
+    if (feedBody) feedBody.innerHTML = '<div class="empty-state"><div class="empty-state-text">Could not load activity</div></div>';
+  }
+}
+
+// ===== Goals =====
+async function renderGoals() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Goals</h1>
+      <button class="btn btn-primary" onclick="showNewGoalModal()">+ New Goal</button>
+    </div>
+    <div class="card">
+      <div class="card-body" id="goals-body" style="padding:0">
+        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+      </div>
+    </div>
+  `;
+  await loadGoalsTable();
+}
+
+async function loadGoalsTable() {
+  const body = document.getElementById('goals-body');
+  try {
+    const goals = await api.get('/goals');
+    if (!goals || goals.length === 0) {
+      body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9673;</div><div class="empty-state-text">No goals yet. Create one to get started.</div></div>';
+      return;
+    }
+    body.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>Title</th><th>Status</th><th>Priority</th><th>Created</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${goals.map(g => `
+            <tr class="expandable" data-goal-id="${g.goal_id}">
+              <td><strong>${escapeHtml(g.title)}</strong><br><span style="color:var(--text-muted);font-size:0.8rem">${escapeHtml(g.description || '').substring(0, 80)}</span></td>
+              <td>${statusBadge(g.status)}</td>
+              <td>${priorityBadge(g.priority)}</td>
+              <td class="truncate-id">${formatDate(g.created_at)}</td>
+              <td>
+                <div class="inline-actions">
+                  ${g.status === 'draft' ? `<button class="btn btn-sm btn-success" onclick="event.stopPropagation();activateGoal('${g.goal_id}')">Activate</button>` : ''}
+                  ${g.status !== 'cancelled' && g.status !== 'completed' ? `<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();cancelGoal('${g.goal_id}')">Cancel</button>` : ''}
+                </div>
+              </td>
+            </tr>
+            <tr class="expand-row" id="goal-detail-${g.goal_id}">
+              <td colspan="5">
+                <div class="expand-content" id="goal-tasks-${g.goal_id}">Loading tasks...</div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // Expandable rows
+    body.querySelectorAll('tr.expandable').forEach(row => {
+      row.addEventListener('click', async () => {
+        const goalId = row.dataset.goalId;
+        const detailRow = document.getElementById(`goal-detail-${goalId}`);
+        const isOpen = detailRow.classList.contains('active');
+        // Close all
+        body.querySelectorAll('.expand-row').forEach(r => r.classList.remove('active'));
+        if (!isOpen) {
+          detailRow.classList.add('active');
+          await loadGoalTasks(goalId);
+        }
+      });
+    });
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function loadGoalTasks(goalId) {
+  const container = document.getElementById(`goal-tasks-${goalId}`);
+  try {
+    const data = await api.get(`/goals/${goalId}`);
+    const tasks = data.tasks || [];
+    if (tasks.length === 0) {
+      container.innerHTML = '<p style="color:var(--text-muted)">No tasks yet. Activate this goal to decompose it into tasks.</p>';
+      return;
+    }
+    container.innerHTML = `
+      <table class="data-table" style="margin:-1rem">
+        <thead><tr><th>Task</th><th>Status</th><th>Type</th></tr></thead>
+        <tbody>${tasks.map(t => `
+          <tr>
+            <td><span class="mono">${truncateId(t.task_id)}</span> ${escapeHtml(t.title || t.description || '')}</td>
+            <td>${statusBadge(t.status)}</td>
+            <td><span style="color:var(--text-muted)">${escapeHtml(t.task_type || '---')}</span></td>
+          </tr>
+        `).join('')}</tbody>
+      </table>
+    `;
+  } catch (e) {
+    container.innerHTML = `<p style="color:var(--red)">Failed to load tasks: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+function showNewGoalModal() {
+  showModal(`
+    <div class="modal-header">
+      <span class="modal-title">Create New Goal</span>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" id="goal-title" placeholder="e.g. Add rate limiting to API" autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-textarea" id="goal-description" placeholder="Describe what you want to achieve..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Priority</label>
+        <select class="form-select" id="goal-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Constraints</label>
+        <input class="form-input" id="goal-constraints" placeholder="constraint1, constraint2, ...">
+        <div class="form-hint">Comma-separated list of constraint names</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Acceptance Criteria</label>
+        <input class="form-input" id="goal-criteria" placeholder="criterion1, criterion2, ...">
+        <div class="form-hint">Comma-separated acceptance criteria</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitNewGoal()">Create Goal</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('goal-title')?.focus(), 100);
+}
+
+async function submitNewGoal() {
+  const title = document.getElementById('goal-title').value.trim();
+  const description = document.getElementById('goal-description').value.trim();
+  const priority = document.getElementById('goal-priority').value;
+  const constraintsRaw = document.getElementById('goal-constraints').value.trim();
+  const criteriaRaw = document.getElementById('goal-criteria').value.trim();
+
+  if (!title) { toast('Title is required', 'error'); return; }
+  if (!description) { toast('Description is required', 'error'); return; }
+
+  const constraints = constraintsRaw ? constraintsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const acceptance_criteria = criteriaRaw ? criteriaRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+  try {
+    await api.post('/goals', { title, description, priority, constraints, acceptance_criteria });
+    closeModal();
+    toast('Goal created successfully', 'success');
+    await loadGoalsTable();
+  } catch (e) {
+    toast(`Failed to create goal: ${e.message}`, 'error');
+  }
+}
+
+async function activateGoal(goalId) {
+  try {
+    await api.post(`/goals/${goalId}/activate`);
+    toast('Goal activated and decomposed into tasks', 'success');
+    await loadGoalsTable();
+  } catch (e) {
+    toast(`Failed to activate: ${e.message}`, 'error');
+  }
+}
+
+async function cancelGoal(goalId) {
+  try {
+    await api.post(`/goals/${goalId}/cancel`);
+    toast('Goal cancelled', 'info');
+    await loadGoalsTable();
+  } catch (e) {
+    toast(`Failed to cancel: ${e.message}`, 'error');
+  }
+}
+
+// ===== Pipeline =====
+async function renderPipeline() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Pipeline Runs</h1>
+      <button class="btn btn-ghost" onclick="renderPipeline()">Refresh</button>
+    </div>
+    <div class="card">
+      <div class="card-body" id="pipeline-body" style="padding:0">
+        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+      </div>
+    </div>
+  `;
+  await loadPipelineTable();
+}
+
+async function loadPipelineTable() {
+  const body = document.getElementById('pipeline-body');
+  try {
+    const runs = await api.get('/runs?limit=50');
+    if (!runs || runs.length === 0) {
+      body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9654;</div><div class="empty-state-text">No pipeline runs yet.</div></div>';
+      return;
+    }
+    body.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>Run ID</th><th>Agent</th><th>Status</th><th>Stage</th><th>Started</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          ${runs.map(r => {
+            const runId = r.run_id || r.id || '';
+            const isBlocked = (r.status || '').toLowerCase() === 'blocked' ||
+                              (r.deploy_route || '').toLowerCase() === 'human-approval';
+            return `
+            <tr class="expandable" data-run-id="${runId}">
+              <td class="truncate-id">${truncateId(runId)}</td>
+              <td class="truncate-id">${truncateId(r.agent_id)}</td>
+              <td>${statusBadge(r.status)}</td>
+              <td><span style="color:var(--text-secondary)">${escapeHtml(r.current_stage || r.stage || '---')}</span></td>
+              <td class="truncate-id">${formatDate(r.started_at || r.created_at)}</td>
+              <td>
+                ${isBlocked ? `
+                  <div class="inline-actions">
+                    <button class="btn btn-sm btn-success" onclick="event.stopPropagation();showApproveDialog('${runId}')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();showRejectDialog('${runId}')">Reject</button>
+                  </div>
+                ` : ''}
+              </td>
+            </tr>
+            <tr class="expand-row" id="run-detail-${runId}">
+              <td colspan="6">
+                <div class="expand-content" id="run-stages-${runId}">Loading stages...</div>
+              </td>
+            </tr>
+          `}).join('')}
+        </tbody>
+      </table>
+    `;
+
+    body.querySelectorAll('tr.expandable').forEach(row => {
+      row.addEventListener('click', () => {
+        const runId = row.dataset.runId;
+        const detailRow = document.getElementById(`run-detail-${runId}`);
+        const isOpen = detailRow.classList.contains('active');
+        body.querySelectorAll('.expand-row').forEach(r => r.classList.remove('active'));
+        if (!isOpen) {
+          detailRow.classList.add('active');
+          renderRunStages(runId, runs.find(r => (r.run_id || r.id) === runId));
+        }
+      });
+    });
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderRunStages(runId, run) {
+  const container = document.getElementById(`run-stages-${runId}`);
+  if (!run) { container.innerHTML = 'No data'; return; }
+
+  const allStages = ['INTENT', 'SANDBOX', 'VALIDATION', 'TRUST_ROUTING', 'DEPLOY'];
+  const currentStage = (run.current_stage || '').toUpperCase();
+  const status = (run.status || '').toLowerCase();
+  const stageResults = run.stage_results || run.stages || {};
+
+  let stagesHtml = '<div class="pipeline-stages">';
+  allStages.forEach((stage, i) => {
+    let cls = 'pending';
+    if (stageResults[stage.toLowerCase()] || stageResults[stage]) {
+      cls = 'completed';
+    }
+    if (stage === currentStage) {
+      cls = status === 'failed' ? 'failed' : 'active';
+    }
+    stagesHtml += `<span class="pipeline-stage ${cls}">${stage}</span>`;
+    if (i < allStages.length - 1) stagesHtml += '<span class="stage-arrow">&#8594;</span>';
+  });
+  stagesHtml += '</div>';
+
+  let detailHtml = '';
+  if (Object.keys(stageResults).length > 0) {
+    detailHtml = '<div style="margin-top:1rem">';
+    for (const [stage, result] of Object.entries(stageResults)) {
+      const passed = result.passed || result.success;
+      detailHtml += `<div style="margin-bottom:0.5rem">
+        <strong style="text-transform:uppercase">${escapeHtml(stage)}</strong>:
+        <span class="badge badge-${passed ? 'green' : 'red'}">${passed ? 'passed' : 'failed'}</span>
+        ${result.message ? `<span style="color:var(--text-muted);margin-left:0.5rem">${escapeHtml(result.message)}</span>` : ''}
+      </div>`;
+    }
+    detailHtml += '</div>';
+  }
+
+  // Additional info
+  let extraHtml = '<div style="margin-top:1rem;display:flex;gap:2rem;color:var(--text-secondary);font-size:0.85rem">';
+  if (run.deploy_route) extraHtml += `<span>Route: ${statusBadge(run.deploy_route)}</span>`;
+  if (run.risk_score !== undefined) extraHtml += `<span>Risk: <strong>${(run.risk_score * 100).toFixed(0)}%</strong></span>`;
+  if (run.agent_id) extraHtml += `<span>Agent: <span class="mono">${truncateId(run.agent_id)}</span></span>`;
+  extraHtml += '</div>';
+
+  container.innerHTML = stagesHtml + detailHtml + extraHtml;
+}
+
+function showApproveDialog(runId) {
+  showModal(`
+    <div class="modal-header">
+      <span class="modal-title">Approve Run</span>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:1rem;color:var(--text-secondary)">Approving run <span class="mono">${truncateId(runId)}</span></p>
+      <div class="form-group">
+        <label class="form-label">Comment (optional)</label>
+        <input class="form-input" id="approve-comment" placeholder="Looks good to me">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-success" onclick="approveRun('${runId}')">Approve</button>
+    </div>
+  `);
+}
+
+function showRejectDialog(runId) {
+  showModal(`
+    <div class="modal-header">
+      <span class="modal-title">Reject Run</span>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="margin-bottom:1rem;color:var(--text-secondary)">Rejecting run <span class="mono">${truncateId(runId)}</span></p>
+      <div class="form-group">
+        <label class="form-label">Reason (required)</label>
+        <textarea class="form-textarea" id="reject-reason" placeholder="Explain why this run should be rejected..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-danger" onclick="rejectRun('${runId}')">Reject</button>
+    </div>
+  `);
+}
+
+async function approveRun(runId) {
+  const comment = document.getElementById('approve-comment')?.value?.trim() || null;
+  try {
+    await api.post(`/runs/${runId}/approve`, { comment });
+    closeModal();
+    toast('Run approved', 'success');
+    await loadPipelineTable();
+  } catch (e) {
+    toast(`Failed to approve: ${e.message}`, 'error');
+  }
+}
+
+async function rejectRun(runId) {
+  const reason = document.getElementById('reject-reason')?.value?.trim();
+  if (!reason) { toast('Reason is required', 'error'); return; }
+  try {
+    await api.post(`/runs/${runId}/reject`, { reason });
+    closeModal();
+    toast('Run rejected', 'info');
+    await loadPipelineTable();
+  } catch (e) {
+    toast(`Failed to reject: ${e.message}`, 'error');
+  }
+}
+
+// ===== Agents =====
+async function renderAgents() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Agents</h1>
+    </div>
+    <div id="agents-grid" class="agent-grid">
+      <div class="empty-state" style="grid-column:1/-1"><div class="empty-state-text">Loading...</div></div>
+    </div>
+  `;
+
+  const container = document.getElementById('agents-grid');
+  try {
+    const agents = await api.get('/agents');
+    if (!agents || agents.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">&#9881;</div><div class="empty-state-text">No agents registered.</div></div>';
+      return;
+    }
+    container.innerHTML = agents.map(a => {
+      const trustScore = a.overall_trust ?? a.trust_score ?? 0.5;
+      const totalDeploys = a.total_deploys ?? a.deploy_count ?? 0;
+      const successRate = a.success_rate ?? (totalDeploys > 0 ? ((a.successful_deploys || 0) / totalDeploys * 100) : 0);
+      const initials = (a.name || a.agent_id || '??').substring(0, 2).toUpperCase();
+      const domainScores = a.domain_trust || a.trust_scores || {};
+
+      return `
+        <div class="agent-card" onclick="this.classList.toggle('expanded')">
+          <div class="agent-card-header">
+            <div class="agent-avatar">${escapeHtml(initials)}</div>
+            <div>
+              <div class="agent-name">${escapeHtml(a.name || a.agent_id || 'Unknown Agent')}</div>
+              <div class="agent-id">${truncateId(a.agent_id)}</div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.8rem">
+              <span style="color:var(--text-muted)">Trust Score</span>
+              <span class="mono" style="color:${trustColor(trustScore)}">${(trustScore * 100).toFixed(0)}%</span>
+            </div>
+            <div class="trust-bar">
+              <div class="trust-bar-fill" style="width:${trustScore * 100}%;background:${trustColor(trustScore)}"></div>
+            </div>
+          </div>
+          <div class="agent-stats">
+            <div>
+              <div class="agent-stat-label">Deploys</div>
+              <div class="agent-stat-value">${totalDeploys}</div>
+            </div>
+            <div>
+              <div class="agent-stat-label">Success</div>
+              <div class="agent-stat-value">${typeof successRate === 'number' ? successRate.toFixed(0) : successRate}%</div>
+            </div>
+          </div>
+          <div class="agent-detail">
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;font-weight:600">Domain Trust</div>
+            ${Object.keys(domainScores).length > 0 ? Object.entries(domainScores).map(([domain, score]) => `
+              <div class="domain-trust">
+                <span class="domain-trust-label">${escapeHtml(domain)}</span>
+                <div style="display:flex;align-items:center;gap:0.5rem;flex:1;margin-left:1rem">
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width:${(score || 0) * 100}%;background:${trustColor(score || 0)}"></div>
+                  </div>
+                  <span class="mono" style="font-size:0.8rem">${((score || 0) * 100).toFixed(0)}%</span>
+                </div>
+              </div>
+            `).join('') : '<p style="color:var(--text-muted);font-size:0.85rem">No domain-specific data</p>'}
+            ${a.capabilities ? `<div style="margin-top:0.75rem"><span style="font-size:0.8rem;color:var(--text-muted)">Capabilities: </span>${a.capabilities.map(c => `<span class="badge badge-blue" style="margin-right:0.25rem">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+// ===== Queue =====
+async function renderQueue() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Deploy Queue</h1>
+      <button class="btn btn-ghost" onclick="renderQueue()">Refresh</button>
+    </div>
+    <div class="card">
+      <div class="card-body" id="queue-body" style="padding:0">
+        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+      </div>
+    </div>
+  `;
+
+  const body = document.getElementById('queue-body');
+  try {
+    const queue = await api.get('/queue');
+    if (!queue || queue.length === 0) {
+      body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9776;</div><div class="empty-state-text">Deploy queue is empty. All clear.</div></div>';
+      return;
+    }
+    body.innerHTML = `<ul class="queue-list">${queue.map((entry, i) => {
+      const id = entry.run_id || entry.id || entry.entry_id || '';
+      const priority = entry.priority || 'medium';
+      return `<li class="queue-item">
+        <span class="queue-position">#${i + 1}</span>
+        <div style="flex:1">
+          <span class="mono">${truncateId(id)}</span>
+          ${entry.agent_id ? `<span style="color:var(--text-muted);margin-left:0.5rem">by ${truncateId(entry.agent_id)}</span>` : ''}
+        </div>
+        ${priorityBadge(priority)}
+        ${entry.deploy_route ? statusBadge(entry.deploy_route) : ''}
+        <span class="truncate-id">${formatDate(entry.queued_at || entry.created_at)}</span>
+      </li>`;
+    }).join('')}</ul>`;
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+// ===== Constraints =====
+async function renderConstraints() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Constraints</h1>
+    </div>
+    <div class="card">
+      <div class="card-body" id="constraints-body" style="padding:0">
+        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+      </div>
+    </div>
+  `;
+
+  const body = document.getElementById('constraints-body');
+  try {
+    const constraints = await api.get('/constraints');
+    if (!constraints || constraints.length === 0) {
+      body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-text">No constraints loaded.</div></div>';
+      return;
+    }
+    body.innerHTML = `
+      <table class="data-table">
+        <thead><tr>
+          <th>Name</th><th>Category</th><th>Severity</th><th>Description</th>
+        </tr></thead>
+        <tbody>
+          ${constraints.map(c => `
+            <tr>
+              <td><strong>${escapeHtml(c.name || c.constraint_id || '---')}</strong></td>
+              <td><span class="badge badge-blue">${escapeHtml(c.category || '---')}</span></td>
+              <td>${severityBadge(c.severity)}</td>
+              <td style="color:var(--text-secondary);max-width:400px">${escapeHtml(c.description || '---')}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (e) {
+    body.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+// ===== WebSocket =====
+function connectWebSocket() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  try {
+    wsConnection = new WebSocket(`${protocol}//${location.host}/api/ws`);
+    wsConnection.onopen = () => {
+      document.getElementById('connection-dot').style.background = 'var(--green)';
+      document.getElementById('connection-label').textContent = 'Connected';
+    };
+    wsConnection.onclose = () => {
+      document.getElementById('connection-dot').style.background = 'var(--red)';
+      document.getElementById('connection-label').textContent = 'Disconnected';
+      // Reconnect after 3 seconds
+      setTimeout(connectWebSocket, 3000);
+    };
+    wsConnection.onerror = () => {
+      document.getElementById('connection-dot').style.background = 'var(--amber)';
+      document.getElementById('connection-label').textContent = 'Reconnecting...';
+    };
+    wsConnection.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        handleWsMessage(msg);
+      } catch (e) { /* ignore parse errors */ }
+    };
+  } catch (e) {
+    // WebSocket not available — rely on polling only
+    document.getElementById('connection-dot').style.background = 'var(--amber)';
+    document.getElementById('connection-label').textContent = 'Polling';
+  }
+}
+
+function handleWsMessage(msg) {
+  const type = msg.type || msg.event;
+  if (type === 'pipeline_update' || type === 'run_update') {
+    if (currentPage === 'dashboard') renderDashboard();
+    if (currentPage === 'pipeline') loadPipelineTable();
+  } else if (type === 'goal_update') {
+    if (currentPage === 'goals') loadGoalsTable();
+    if (currentPage === 'dashboard') renderDashboard();
+  } else if (type === 'approval_needed') {
+    toast('New run requires approval', 'info');
+    if (currentPage === 'dashboard') renderDashboard();
+    if (currentPage === 'pipeline') loadPipelineTable();
+  }
+}
+
+// ===== Init =====
+navigate('dashboard');
+connectWebSocket();
+</script>
+</body>
+</html>

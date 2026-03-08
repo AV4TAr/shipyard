@@ -1,9 +1,15 @@
 """FastAPI application factory for the AI-CICD Command Center."""
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .routes import agents, constraints, goals, pipeline, queue, status, ws
+
+_STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_app() -> FastAPI:
@@ -31,5 +37,14 @@ def create_app() -> FastAPI:
     app.include_router(queue.router)
     app.include_router(constraints.router)
     app.include_router(ws.router)
+
+    # Root route — serve the Command Center SPA
+    @app.get("/")
+    def root():
+        """Serve the Command Center single-page application."""
+        return FileResponse(str(_STATIC_DIR / "index.html"))
+
+    # Mount static files (after API routers so /api/* takes priority)
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
 
     return app
