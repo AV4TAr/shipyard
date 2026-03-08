@@ -19,6 +19,7 @@ dev = [
     "pytest-asyncio",
     "ruff",
 ]
+api = ["fastapi", "uvicorn[standard]", "websockets"]
 opensandbox = ["opensandbox"]
 
 [tool.setuptools.packages.find]

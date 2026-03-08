@@ -12,6 +12,11 @@ from .models import (
     ValidationSignal,
     ValidationVerdict,
 )
+from .real_runners import (
+    RealResourceBoundsRunner,
+    RealSecurityScanRunner,
+    RealStaticAnalysisRunner,
+)
 from .signals import (
     BehavioralDiffRunner,
     IntentAlignmentRunner,
@@ -25,6 +30,9 @@ __all__ = [
     "BehavioralDiffRunner",
     "Finding",
     "IntentAlignmentRunner",
+    "RealResourceBoundsRunner",
+    "RealSecurityScanRunner",
+    "RealStaticAnalysisRunner",
     "ResourceBoundsRunner",
     "SecurityScanRunner",
     "Severity",
