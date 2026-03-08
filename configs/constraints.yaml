@@ -1,0 +1,225 @@
+name: "core-platform-constraints"
+description: "Architectural constraints for the core platform. Agents must read these before every task."
+version: "1.0.0"
+
+constraints:
+  # ---------------------------------------------------------------
+  # ARCHITECTURE
+  # ---------------------------------------------------------------
+  - constraint_id: "no-raw-sql"
+    category: "architecture"
+    severity: "must"
+    rule: "Do not write raw SQL queries — use the ORM (SQLAlchemy)."
+    rationale: >
+      Raw SQL bypasses schema validation, makes migrations harder to track,
+      and is a common source of injection vulnerabilities.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "\\bexecute\\s*\\(\\s*[\"']\\s*(?:SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)"
+        - "\\btext\\s*\\(\\s*[\"']\\s*(?:SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)"
+        - "\\braw\\s*\\(\\s*[\"']\\s*(?:SELECT|INSERT|UPDATE|DELETE|DROP|ALTER|CREATE)"
+    applies_to:
+      file_types: ["*.py"]
+
+  - constraint_id: "repository-pattern"
+    category: "architecture"
+    severity: "should"
+    rule: "Use the repository pattern for all database access."
+    rationale: >
+      The repository pattern decouples business logic from data access,
+      making code easier to test and migrate between databases.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "\\bsession\\.query\\b"
+        - "\\bsession\\.execute\\b"
+      patterns:
+        - "**/repositories/*.py"
+    applies_to:
+      paths: ["src/services/**", "src/api/**"]
+      file_types: ["*.py"]
+
+  - constraint_id: "dependency-injection-auth"
+    category: "architecture"
+    severity: "must"
+    rule: "Use dependency injection for authentication — never instantiate auth directly."
+    rationale: >
+      Hard-coded auth makes testing impossible and prevents swapping auth
+      providers without code changes across the codebase.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "AuthService\\(\\)"
+        - "AuthProvider\\(\\)"
+    applies_to:
+      paths: ["src/api/**", "src/services/**"]
+      file_types: ["*.py"]
+
+  # ---------------------------------------------------------------
+  # SECURITY
+  # ---------------------------------------------------------------
+  - constraint_id: "no-secrets-in-code"
+    category: "security"
+    severity: "must"
+    rule: "Never commit secrets, tokens, or API keys in source code."
+    rationale: >
+      Secrets in code end up in version control history forever and are
+      trivially extractable. Use environment variables or a secrets manager.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "(?i)(?:api[_-]?key|secret[_-]?key|password|token)\\s*=\\s*[\"'][^\"']{8,}"
+        - "(?i)AKIA[0-9A-Z]{16}"
+        - "(?i)sk-[a-zA-Z0-9]{20,}"
+    applies_to:
+      file_types: ["*.py", "*.yaml", "*.yml", "*.json", "*.toml"]
+
+  - constraint_id: "no-eval-exec"
+    category: "security"
+    severity: "must"
+    rule: "Do not use eval() or exec() — they enable arbitrary code execution."
+    rationale: >
+      eval/exec on untrusted input is the most common remote code execution
+      vector in Python. Use safe alternatives like ast.literal_eval when
+      parsing data, or structured dispatch for dynamic behaviour.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "\\beval\\s*\\("
+        - "\\bexec\\s*\\("
+    applies_to:
+      file_types: ["*.py"]
+
+  - constraint_id: "pydantic-input-validation"
+    category: "security"
+    severity: "should"
+    rule: "Validate all user-facing input with Pydantic models."
+    rationale: >
+      Pydantic provides type coercion, validation, and clear error messages.
+      Manual validation is error-prone and inconsistent.
+    enforcement:
+      check_type: "custom"
+      custom_check: "check_pydantic_input_validation"
+    applies_to:
+      paths: ["src/api/**"]
+      file_types: ["*.py"]
+
+  - constraint_id: "no-hardcoded-urls"
+    category: "security"
+    severity: "should"
+    rule: "Do not hardcode URLs — use configuration or environment variables."
+    rationale: >
+      Hardcoded URLs break when environments change and make it impossible
+      to configure services per deployment without code changes.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "https?://(?:localhost|127\\.0\\.0\\.1|10\\.|172\\.1[6-9]\\.|172\\.2[0-9]\\.|172\\.3[0-1]\\.|192\\.168\\.)"
+        - "https?://[a-z0-9.-]+\\.(?:internal|local|corp)\\b"
+    applies_to:
+      file_types: ["*.py"]
+
+  # ---------------------------------------------------------------
+  # TESTING
+  # ---------------------------------------------------------------
+  - constraint_id: "integration-test-per-endpoint"
+    category: "testing"
+    severity: "should"
+    rule: "Every API endpoint must have at least one integration test."
+    rationale: >
+      Unit tests alone miss issues at the boundary — serialisation, auth,
+      middleware, and database interaction. Integration tests catch these.
+    enforcement:
+      check_type: "custom"
+      custom_check: "check_endpoint_integration_tests"
+    applies_to:
+      paths: ["src/api/**"]
+      file_types: ["*.py"]
+
+  - constraint_id: "no-mocking-database"
+    category: "testing"
+    severity: "must"
+    rule: "Do not mock the database in tests — use the test database fixture."
+    rationale: >
+      Mocking the database hides real query issues, schema mismatches, and
+      constraint violations. Tests that mock the DB give false confidence.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "mock.*(?:Session|Database|Engine|Connection)"
+        - "patch.*(?:session|database|engine|connection)"
+        - "MagicMock.*(?:Session|Database)"
+    applies_to:
+      paths: ["tests/**"]
+      file_types: ["*.py"]
+
+  # ---------------------------------------------------------------
+  # DEPENDENCIES
+  # ---------------------------------------------------------------
+  - constraint_id: "no-flask-django"
+    category: "dependencies"
+    severity: "must"
+    rule: "Do not use Flask or Django — this project uses FastAPI."
+    rationale: >
+      Mixing web frameworks creates confusion, duplicates middleware, and
+      fragments the team's knowledge. We standardised on FastAPI for its
+      async support and automatic OpenAPI generation.
+    enforcement:
+      check_type: "dependency_check"
+      forbidden_patterns:
+        - "\\bflask\\b"
+        - "\\bdjango\\b"
+    applies_to:
+      file_types: ["*.py"]
+
+  - constraint_id: "pin-dependency-versions"
+    category: "dependencies"
+    severity: "should"
+    rule: "Pin all dependency versions in requirements files."
+    rationale: >
+      Unpinned dependencies cause non-reproducible builds and can introduce
+      breaking changes or vulnerabilities silently.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "^[a-zA-Z][a-zA-Z0-9_-]*\\s*$"
+    applies_to:
+      file_types: ["*requirements*.txt"]
+
+  # ---------------------------------------------------------------
+  # PERFORMANCE
+  # ---------------------------------------------------------------
+  - constraint_id: "no-n-plus-one"
+    category: "performance"
+    severity: "should"
+    rule: "Avoid N+1 query patterns — use eager loading or batch queries."
+    rationale: >
+      N+1 queries are the most common performance issue in ORM-based
+      applications. A single list page can generate hundreds of queries.
+    enforcement:
+      check_type: "file_pattern"
+      forbidden_patterns:
+        - "for.*in.*\\.all\\(\\).*:\\s*$"
+      patterns:
+        - "joinedload"
+        - "selectinload"
+        - "subqueryload"
+    applies_to:
+      file_types: ["*.py"]
+
+  - constraint_id: "async-io-operations"
+    category: "performance"
+    severity: "prefer"
+    rule: "Use async/await for I/O operations (HTTP calls, file I/O, DB queries)."
+    rationale: >
+      Synchronous I/O blocks the event loop in our async FastAPI application,
+      reducing throughput under load. Use httpx instead of requests, aiofiles
+      for file I/O, and async SQLAlchemy sessions.
+    enforcement:
+      check_type: "dependency_check"
+      forbidden_patterns:
+        - "\\brequests\\.(?:get|post|put|patch|delete)\\b"
+    applies_to:
+      paths: ["src/**"]
+      file_types: ["*.py"]

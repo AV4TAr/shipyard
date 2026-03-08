@@ -1,0 +1,71 @@
+# AI-CICD Default Pipeline Configuration
+# ========================================
+# Sensible defaults for all pipeline thresholds, weights, and timeouts.
+
+pipeline:
+  # Maximum sandbox test-fix iterations before giving up
+  max_sandbox_iterations: 5
+
+  # Maximum seconds for the sandbox execution
+  sandbox_timeout: 300
+
+  # Whether to automatically roll back on anomaly detection post-deploy
+  auto_rollback_enabled: true
+
+# Risk thresholds: score boundaries for each risk level
+# A change with risk_score >= threshold is classified at that level
+# (evaluated from highest to lowest)
+risk_thresholds:
+  critical: 0.85
+  high: 0.60
+  medium: 0.35
+  low: 0.0
+
+# Validation signal weights (higher weight = more influence on risk score)
+signal_weights:
+  static_analysis: 1.0
+  behavioral_diff: 1.5
+  intent_alignment: 1.2
+  resource_bounds: 1.0
+  security_scan: 2.0
+
+# Risk factor weights for the risk scorer
+risk_factor_weights:
+  file_sensitivity: 0.25
+  blast_radius: 0.20
+  agent_trust: 0.20
+  validation_confidence: 0.20
+  time_of_day: 0.15
+
+# Deploy routing: maps risk levels to deployment strategies
+deploy_routes:
+  low: auto_deploy
+  medium: agent_review
+  high: human_approval
+  critical: human_approval_canary
+
+# Trust scoring parameters
+trust:
+  # New agents start with this baseline trust score
+  baseline_trust: 0.1
+  # Number of deployments to reach full tenure bonus
+  tenure_ramp_deployments: 100
+  # Weight components for trust score computation
+  weights:
+    success_rate: 0.6
+    rollback_penalty: 0.3
+    tenure_bonus: 0.1
+
+# Sandbox defaults
+sandbox:
+  default_image: "python:3.11-slim"
+  resource_limits:
+    max_cpu: 1.0
+    max_memory_mb: 512
+    max_disk_mb: 1024
+
+# Monitoring thresholds for post-deploy anomaly detection
+monitoring:
+  error_rate_threshold: 0.05
+  latency_p99_threshold_ms: 500
+  rollback_cooldown_seconds: 300
