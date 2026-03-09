@@ -1,6 +1,6 @@
-# AI-CICD
+# Shipyard
 
-CI/CD reimagined for AI agents.
+Shipyard is an AI-native CI/CD system that turns developer intent into autonomous pipelines.
 
 ## Architecture
 
