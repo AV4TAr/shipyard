@@ -32,7 +32,7 @@ The primary interface between the human operator (air traffic controller) and th
 
 ## Completed
 
-- [x] **Command Center (Web UI)** — FastAPI backend (`src/api/`) + self-contained SPA frontend (`src/api/static/index.html`). 6 views: dashboard, goals, pipeline, agents, queue, constraints. Dark theme, WebSocket, auto-refresh. Same `CLIRuntime` underneath — CLI and UI are interchangeable.
+- [x] **Command Center (Web UI)** — FastAPI backend (`src/api/`) + self-contained SPA frontend (`src/api/static/index.html`). 7 views: dashboard, goals, pipeline, agents, queue, constraints, projects. Dark theme, WebSocket, auto-refresh, structured feedback viewer. Same `CLIRuntime` underneath — CLI and UI are interchangeable.
 - [x] **Project Layer** — `src/projects/` — Project → Milestone → Goal hierarchy. Full lifecycle (draft → planning → active → completed). Rule-based planner generates 3-phase milestones (Foundation, Implementation, Polish).
 - [x] **LLM Integration** — `src/llm/` — OpenRouter client (stdlib only), LLM goal decomposer with fallback, intent alignment checker, semantic merge analyzer.
 - [x] **Persistent Storage** — `src/storage/` — Repository pattern with memory + SQLite backends. JSON-blob storage with indexed columns, factory pattern.
@@ -46,14 +46,7 @@ The primary interface between the human operator (air traffic controller) and th
 
 ## High Priority
 
-- [ ] **Agent Selection / Routing** — smart assignment of tasks to the best agent. This is a pipeline-level decision that considers:
-  - Capability match (does the agent have the right skills?)
-  - Domain-specific trust (trusted for API work but not DB migrations?)
-  - Availability and queue depth
-  - Historical performance on similar task types
-  - Cost/speed tradeoffs
-  - Requires an Agent Registry (capabilities, specializations, status) and a Task Router (matching algorithm)
-  - This is a key differentiator — traditional CI/CD never had to solve "who should do this work"
+- [x] **Agent Selection / Routing** — AgentRegistry, TaskRouter, RoutingBridge wired into CLIRuntime. Weighted scoring (capability 0.35, language 0.20, framework 0.15, trust 0.20, load 0.10). Domain-specific trust. SDK-to-routing bridge. 8 API endpoints, CLI commands (`route`, `agents register`). Persistence (memory + SQLite). Event notifications (TASK_ROUTED, ROUTING_FALLBACK).
 - [x] **Storage Integration** — `src/storage/` repositories wired into GoalManager, TrustTracker, IntentRegistry, PipelineOrchestrator. `CLIRuntime.from_defaults(storage_backend="sqlite", db_path="...")` or `AI_CICD_DB_PATH` env var.
 - [x] **LLM Decomposer Integration** — `OPENROUTER_API_KEY` env var auto-selects LLMGoalDecomposer in `CLIRuntime.from_defaults()`, with fallback to rule-based.
 - [x] **Notification Integration** — EventDispatcher wired into GoalManager (goal.created/activated/completed) and PipelineOrchestrator (pipeline.started/failed/passed, approval.needed).
@@ -62,8 +55,9 @@ The primary interface between the human operator (air traffic controller) and th
 
 - [ ] OpenSandbox production hardening — resource usage metrics, JSON report parsing via `sandbox.files.read_file()`, timeout enforcement
 - [ ] Behavioral diffing with traffic replay
-- [ ] Command Center UI polish — structured feedback viewer, configuration editor, constraint editing
-- [ ] Project Layer API routes + frontend views
+- [ ] Command Center config editor — in-browser editing of pipeline thresholds/weights
+- [x] Command Center UI polish — structured feedback viewer with collapsible stages, loading spinners, tab animations, toast notifications, enhanced agents tab with capability badges
+- [x] Project Layer API routes + frontend views — 8 API endpoints, CLI `project` subcommand, Projects tab in Command Center (7th tab)
 
 ## Low Priority
 

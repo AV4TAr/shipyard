@@ -9,7 +9,7 @@ AI-native CI/CD pipeline where humans are "air traffic controllers" (set goals a
 ## Commands
 
 ```bash
-# Run all tests (589 tests)
+# Run all tests (632 tests)
 python3 -m pytest tests/
 
 # Run a single test file
