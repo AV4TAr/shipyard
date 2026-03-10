@@ -54,9 +54,9 @@ The primary interface between the human operator (air traffic controller) and th
   - Cost/speed tradeoffs
   - Requires an Agent Registry (capabilities, specializations, status) and a Task Router (matching algorithm)
   - This is a key differentiator — traditional CI/CD never had to solve "who should do this work"
-- [ ] **Storage Integration** — wire `src/storage/` repositories into existing managers (GoalManager, TrustTracker, IntentRegistry, PipelineOrchestrator) so data persists across restarts
-- [ ] **LLM Decomposer Integration** — wire `src/llm/decomposer.py` into GoalManager as an alternative to the rule-based decomposer
-- [ ] **Notification Integration** — wire `src/notifications/` EventDispatcher into pipeline stages so events fire automatically
+- [x] **Storage Integration** — `src/storage/` repositories wired into GoalManager, TrustTracker, IntentRegistry, PipelineOrchestrator. `CLIRuntime.from_defaults(storage_backend="sqlite", db_path="...")` or `AI_CICD_DB_PATH` env var.
+- [x] **LLM Decomposer Integration** — `OPENROUTER_API_KEY` env var auto-selects LLMGoalDecomposer in `CLIRuntime.from_defaults()`, with fallback to rule-based.
+- [x] **Notification Integration** — EventDispatcher wired into GoalManager (goal.created/activated/completed) and PipelineOrchestrator (pipeline.started/failed/passed, approval.needed).
 
 ## Medium Priority
 
