@@ -9,7 +9,11 @@ from src.cli.runtime import CLIRuntime
 
 @lru_cache(maxsize=1)
 def _get_runtime() -> CLIRuntime:
-    """Return a singleton CLIRuntime instance."""
+    """Return a singleton CLIRuntime instance.
+
+    Respects the ``AI_CICD_DB_PATH`` environment variable for SQLite
+    persistence.  Without it, the default in-memory backend is used.
+    """
     return CLIRuntime.from_defaults()
 
 

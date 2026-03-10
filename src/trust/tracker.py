@@ -2,19 +2,38 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from .models import AgentProfile
 
+if TYPE_CHECKING:
+    from src.storage.repositories import AgentProfileRepository
+
 
 class TrustTracker:
-    """In-memory store for :class:`AgentProfile` objects.
+    """Store for :class:`AgentProfile` objects with optional persistence.
 
-    Provides methods to record deployment outcomes and recompute trust scores.
+    When *profile_repo* is provided, profiles are persisted through that
+    repository.  Otherwise falls back to an internal dict.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, profile_repo: AgentProfileRepository | None = None) -> None:
+        self._profile_repo = profile_repo
         self._profiles: dict[str, AgentProfile] = {}
+
+    # ------------------------------------------------------------------
+    # Storage helpers
+    # ------------------------------------------------------------------
+
+    def _save_profile(self, profile: AgentProfile) -> None:
+        if self._profile_repo:
+            self._profile_repo.save(profile)
+        self._profiles[profile.agent_id] = profile
+
+    def _get_profile(self, agent_id: str) -> AgentProfile | None:
+        if self._profile_repo:
+            return self._profile_repo.get(agent_id)
+        return self._profiles.get(agent_id)
 
     # ------------------------------------------------------------------
     # Public API
@@ -22,9 +41,11 @@ class TrustTracker:
 
     def get_profile(self, agent_id: str) -> AgentProfile:
         """Return the profile for *agent_id*, creating a default one if new."""
-        if agent_id not in self._profiles:
-            self._profiles[agent_id] = AgentProfile(agent_id=agent_id)
-        return self._profiles[agent_id]
+        profile = self._get_profile(agent_id)
+        if profile is None:
+            profile = AgentProfile(agent_id=agent_id)
+            self._save_profile(profile)
+        return profile
 
     def record_outcome(
         self,
@@ -71,7 +92,7 @@ class TrustTracker:
                 "avg_risk_score": round(new_avg_risk, 4),
             }
         )
-        self._profiles[agent_id] = updated
+        self._save_profile(updated)
         return updated
 
     def compute_trust_score(self, agent_id: str) -> float:
@@ -88,4 +109,6 @@ class TrustTracker:
     @property
     def profiles(self) -> dict[str, AgentProfile]:
         """Read-only access to all stored profiles."""
+        if self._profile_repo:
+            return {p.agent_id: p for p in self._profile_repo.list_all()}
         return dict(self._profiles)

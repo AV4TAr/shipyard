@@ -11,7 +11,7 @@ import json
 import os
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from src.coordination.claims import ClaimManager
 from src.coordination.queue import DeployQueue
@@ -64,12 +64,34 @@ class CLIRuntime:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_defaults(cls) -> CLIRuntime:
-        """Create a runtime with default in-memory components.
+    def from_defaults(
+        cls,
+        *,
+        storage_backend: str = "memory",
+        db_path: str | None = None,
+    ) -> CLIRuntime:
+        """Create a runtime with default components and optional persistence.
+
+        When ``storage_backend="sqlite"``, data is persisted to disk via
+        SQLite.  The default ``"memory"`` backend keeps everything in-memory
+        as before.
+
+        The environment variable ``AI_CICD_DB_PATH`` can also be used to
+        enable SQLite persistence without passing arguments explicitly.
 
         Useful for local development, demos, and tests.
         """
-        intent_registry = IntentRegistry()
+        # Allow env-var to override the storage backend
+        env_db_path = os.environ.get("AI_CICD_DB_PATH")
+        if env_db_path:
+            storage_backend = "sqlite"
+            db_path = db_path or env_db_path
+
+        from src.storage.factory import create_storage
+
+        storage = create_storage(backend=storage_backend, db_path=db_path)
+
+        intent_registry = IntentRegistry(intent_repo=storage.intents)
 
         sandbox_backend = None
         if os.environ.get("OPENSANDBOX_SERVER_URL"):
@@ -80,7 +102,7 @@ class CLIRuntime:
 
         validation_gate = ValidationGate(runners=[])
         risk_scorer = RiskScorer()
-        trust_tracker = TrustTracker()
+        trust_tracker = TrustTracker(profile_repo=storage.agent_profiles)
         claim_manager = ClaimManager()
         deploy_queue = DeployQueue()
 
@@ -92,9 +114,14 @@ class CLIRuntime:
             trust_tracker=trust_tracker,
             claim_manager=claim_manager,
             deploy_queue=deploy_queue,
+            run_repo=storage.pipeline_runs,
         )
 
-        goal_manager = GoalManager(decomposer=GoalDecomposer())
+        goal_manager = GoalManager(
+            decomposer=GoalDecomposer(),
+            goal_repo=storage.goals,
+            task_repo=storage.tasks,
+        )
 
         return cls(
             goal_manager=goal_manager,

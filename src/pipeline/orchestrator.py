@@ -5,8 +5,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.coordination.claims import ClaimManager
 from src.coordination.queue import DeployQueue
@@ -27,6 +26,9 @@ from .models import (
     StageResult,
 )
 
+if TYPE_CHECKING:
+    from src.storage.repositories import PipelineRunRepository
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,7 @@ class PipelineOrchestrator:
         claim_manager: Manages agent code-area claims.
         deploy_queue: Priority queue for approved deployments.
         config: Pipeline configuration (timeouts, thresholds, etc.).
+        run_repo: Optional repository for persisting pipeline runs.
     """
 
     def __init__(
@@ -59,6 +62,7 @@ class PipelineOrchestrator:
         claim_manager: ClaimManager,
         deploy_queue: DeployQueue,
         config: PipelineConfig | None = None,
+        run_repo: PipelineRunRepository | None = None,
     ) -> None:
         self.intent_registry = intent_registry
         self.sandbox_manager = sandbox_manager
@@ -68,8 +72,18 @@ class PipelineOrchestrator:
         self.claim_manager = claim_manager
         self.deploy_queue = deploy_queue
         self.config = config or PipelineConfig()
+        self._run_repo = run_repo
 
         self._runs: dict[uuid.UUID, PipelineRun] = {}
+
+    # ------------------------------------------------------------------
+    # Storage helpers
+    # ------------------------------------------------------------------
+
+    def _save_run(self, run: PipelineRun) -> None:
+        if self._run_repo:
+            self._run_repo.save(run)
+        self._runs[run.run_id] = run
 
     # ------------------------------------------------------------------
     # Public API
@@ -99,47 +113,61 @@ class PipelineOrchestrator:
             agent_id=agent_id,
             status=PipelineStatus.IN_PROGRESS,
         )
-        self._runs[pipeline_run.run_id] = pipeline_run
+        self._save_run(pipeline_run)
 
         # Stage 1: Intent validation
         intent_result = self._run_intent_stage(intent_declaration, pipeline_run)
         pipeline_run.record_stage(intent_result)
         if intent_result.status == PipelineStatus.FAILED:
+            self._save_run(pipeline_run)
             return pipeline_run
 
         # Stage 2: Sandbox execution
         sandbox_result = self._run_sandbox_stage(intent_declaration, pipeline_run)
         pipeline_run.record_stage(sandbox_result)
         if sandbox_result.status == PipelineStatus.FAILED:
+            self._save_run(pipeline_run)
             return pipeline_run
 
         # Stage 3: Validation gate
         validation_result = self._run_validation_stage(intent_declaration, pipeline_run)
         pipeline_run.record_stage(validation_result)
         if validation_result.status == PipelineStatus.FAILED:
+            self._save_run(pipeline_run)
             return pipeline_run
 
         # Stage 4: Trust-based routing
-        routing_result = self._run_trust_routing_stage(intent_declaration, agent_id, pipeline_run)
+        routing_result = self._run_trust_routing_stage(
+            intent_declaration, agent_id, pipeline_run
+        )
         pipeline_run.record_stage(routing_result)
         if routing_result.status == PipelineStatus.FAILED:
+            self._save_run(pipeline_run)
             return pipeline_run
 
         # Stage 5: Deploy
         deploy_result = self._run_deploy_stage(intent_declaration, agent_id, pipeline_run)
         pipeline_run.record_stage(deploy_result)
         if deploy_result.status == PipelineStatus.FAILED:
+            self._save_run(pipeline_run)
             return pipeline_run
 
         pipeline_run.mark_completed(PipelineStatus.PASSED)
+        self._save_run(pipeline_run)
         return pipeline_run
 
     def get_run(self, run_id: uuid.UUID) -> PipelineRun | None:
         """Retrieve a pipeline run by its ID."""
+        if self._run_repo:
+            run = self._run_repo.get(run_id)
+            if run is not None:
+                return run
         return self._runs.get(run_id)
 
     def list_runs(self, agent_id: str | None = None) -> list[PipelineRun]:
         """List all pipeline runs, optionally filtered by agent_id."""
+        if self._run_repo:
+            return self._run_repo.list_all(agent_id=agent_id)
         runs = list(self._runs.values())
         if agent_id is not None:
             runs = [r for r in runs if r.agent_id == agent_id]

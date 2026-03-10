@@ -1,29 +1,45 @@
-"""In-memory registry of active intents."""
+"""Registry of active intents with optional persistence."""
 
 from __future__ import annotations
 
 import uuid
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 from .schema import IntentDeclaration, IntentVerdict, ScopeConstraint
 from .validator import IntentValidator
+
+if TYPE_CHECKING:
+    from src.storage.repositories import IntentRepository
 
 
 class IntentRegistry:
     """Stores and manages active :class:`IntentDeclaration` instances.
 
     Uses :class:`IntentValidator` internally to validate each intent before
-    it is registered.
+    it is registered.  When *intent_repo* is provided, intents are also
+    persisted through that repository.
     """
 
     def __init__(
         self,
         constraints: Sequence[ScopeConstraint] | None = None,
         validator: IntentValidator | None = None,
+        *,
+        intent_repo: IntentRepository | None = None,
     ) -> None:
         self._active: dict[uuid.UUID, IntentDeclaration] = {}
         self._constraints = list(constraints or [])
         self._validator = validator or IntentValidator()
+        self._intent_repo = intent_repo
+
+    # ------------------------------------------------------------------
+    # Storage helpers
+    # ------------------------------------------------------------------
+
+    def _save_intent(self, intent: IntentDeclaration) -> None:
+        if self._intent_repo:
+            self._intent_repo.save(intent)
+        self._active[intent.intent_id] = intent
 
     # ------------------------------------------------------------------
     # Public API
@@ -40,7 +56,7 @@ class IntentRegistry:
             active_intents=list(self._active.values()),
         )
         if verdict.approved:
-            self._active[intent.intent_id] = intent
+            self._save_intent(intent)
         return verdict
 
     def release(self, intent_id: uuid.UUID) -> bool:

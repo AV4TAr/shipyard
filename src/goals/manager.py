@@ -1,32 +1,94 @@
-"""GoalManager — in-memory goal and task lifecycle management."""
+"""GoalManager — goal and task lifecycle management with optional persistence."""
 
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from .decomposer import GoalDecomposer
 from .models import (
     AgentTask,
     Goal,
     GoalInput,
+    GoalPriority,
     GoalStatus,
     TaskBreakdown,
     TaskStatus,
 )
 
+if TYPE_CHECKING:
+    from src.storage.repositories import GoalRepository, TaskRepository
+
 
 class GoalManager:
     """Creates, stores, and manages :class:`Goal` and :class:`AgentTask` lifecycles.
 
-    All state is kept in-memory (dicts keyed by ID).
+    When *goal_repo* and/or *task_repo* are provided, the manager delegates
+    storage to those repositories.  Otherwise it falls back to internal dicts
+    for full backward compatibility.
     """
 
-    def __init__(self, decomposer: GoalDecomposer | None = None) -> None:
+    def __init__(
+        self,
+        decomposer: GoalDecomposer | None = None,
+        *,
+        goal_repo: GoalRepository | None = None,
+        task_repo: TaskRepository | None = None,
+    ) -> None:
+        self._decomposer = decomposer or GoalDecomposer()
+        self._goal_repo = goal_repo
+        self._task_repo = task_repo
+        # Internal dicts as fallback when no repos are provided
         self._goals: dict[uuid.UUID, Goal] = {}
         self._breakdowns: dict[uuid.UUID, TaskBreakdown] = {}
         self._tasks: dict[uuid.UUID, AgentTask] = {}
-        self._decomposer = decomposer or GoalDecomposer()
+
+    # ------------------------------------------------------------------
+    # Storage helpers
+    # ------------------------------------------------------------------
+
+    def _save_goal(self, goal: Goal) -> None:
+        if self._goal_repo:
+            self._goal_repo.save(goal)
+        self._goals[goal.goal_id] = goal
+
+    def _get_goal(self, goal_id: uuid.UUID) -> Goal:
+        if self._goal_repo:
+            goal = self._goal_repo.get(goal_id)
+            if goal is None:
+                raise KeyError(f"Goal {goal_id} not found")
+            return goal
+        try:
+            return self._goals[goal_id]
+        except KeyError:
+            raise KeyError(f"Goal {goal_id} not found") from None
+
+    def _list_goals(
+        self,
+        status: GoalStatus | None = None,
+        priority: GoalPriority | None = None,
+    ) -> list[Goal]:
+        if self._goal_repo:
+            return self._goal_repo.list_all(status=status, priority=priority)
+        results = list(self._goals.values())
+        if status is not None:
+            results = [g for g in results if g.status == status]
+        if priority is not None:
+            results = [g for g in results if g.priority == priority]
+        return results
+
+    def _save_task(self, task: AgentTask) -> None:
+        if self._task_repo:
+            self._task_repo.save(task)
+        self._tasks[task.task_id] = task
+
+    def _get_tasks_for_goal(self, goal_id: uuid.UUID) -> list[AgentTask]:
+        if self._task_repo:
+            return self._task_repo.list_by_goal(goal_id)
+        breakdown = self._breakdowns.get(goal_id)
+        if breakdown is None:
+            return []
+        return list(breakdown.tasks)
 
     # ------------------------------------------------------------------
     # Goal CRUD
@@ -48,7 +110,7 @@ class GoalManager:
             created_by=created_by,
             status=GoalStatus.DRAFT,
         )
-        self._goals[goal.goal_id] = goal
+        self._save_goal(goal)
         return goal
 
     def get(self, goal_id: uuid.UUID) -> Goal:
@@ -57,10 +119,7 @@ class GoalManager:
         Raises:
             KeyError: If the goal does not exist.
         """
-        try:
-            return self._goals[goal_id]
-        except KeyError:
-            raise KeyError(f"Goal {goal_id} not found")
+        return self._get_goal(goal_id)
 
     def list_goals(
         self,
@@ -68,12 +127,7 @@ class GoalManager:
         priority: Optional["GoalStatus"] = None,  # actually GoalPriority; avoids circular
     ) -> list[Goal]:
         """List all goals, optionally filtered by status and/or priority."""
-        results = list(self._goals.values())
-        if status is not None:
-            results = [g for g in results if g.status == status]
-        if priority is not None:
-            results = [g for g in results if g.priority == priority]
-        return results
+        return self._list_goals(status=status, priority=priority)
 
     def cancel(self, goal_id: uuid.UUID) -> Goal:
         """Cancel a goal and all its pending/assigned tasks.
@@ -83,15 +137,20 @@ class GoalManager:
         """
         goal = self.get(goal_id)
         goal.status = GoalStatus.CANCELLED
+        self._save_goal(goal)
 
         # Cancel outstanding tasks
+        tasks = self._get_tasks_for_goal(goal_id)
+        for task in tasks:
+            if task.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS):
+                task.status = TaskStatus.FAILED
+                self._save_task(task)
+
+        # Also update breakdown tasks in memory (for backward compat)
         if goal_id in self._breakdowns:
             for task in self._breakdowns[goal_id].tasks:
                 if task.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS):
                     task.status = TaskStatus.FAILED
-                    # Also update the task index
-                    if task.task_id in self._tasks:
-                        self._tasks[task.task_id].status = TaskStatus.FAILED
 
         return goal
 
@@ -103,6 +162,7 @@ class GoalManager:
         """
         goal = self.get(goal_id)
         goal.status = GoalStatus.COMPLETED
+        self._save_goal(goal)
         return goal
 
     # ------------------------------------------------------------------
@@ -117,13 +177,14 @@ class GoalManager:
         """
         goal = self.get(goal_id)
         goal.status = GoalStatus.ACTIVE
+        self._save_goal(goal)
 
         breakdown = self._decomposer.decompose(goal)
         self._breakdowns[goal_id] = breakdown
 
-        # Index every task for fast lookup
+        # Index every task for fast lookup and persist
         for task in breakdown.tasks:
-            self._tasks[task.task_id] = task
+            self._save_task(task)
 
         return breakdown
 
@@ -138,10 +199,7 @@ class GoalManager:
             KeyError: If the goal does not exist.
         """
         self.get(goal_id)  # verify goal exists
-        breakdown = self._breakdowns.get(goal_id)
-        if breakdown is None:
-            return []
-        return list(breakdown.tasks)
+        return self._get_tasks_for_goal(goal_id)
 
     def update_task_status(self, task_id: uuid.UUID, status: TaskStatus) -> AgentTask:
         """Update the status of a task.
@@ -152,16 +210,26 @@ class GoalManager:
         Raises:
             KeyError: If the task does not exist.
         """
-        if task_id not in self._tasks:
-            raise KeyError(f"Task {task_id} not found")
+        # Try repo first, then internal dict
+        task: AgentTask | None = None
+        if self._task_repo:
+            task = self._task_repo.get(task_id)
+        if task is None:
+            if task_id not in self._tasks:
+                raise KeyError(f"Task {task_id} not found")
+            task = self._tasks[task_id]
 
-        task = self._tasks[task_id]
         task.status = status
+        self._save_task(task)
 
         # If a task is now IN_PROGRESS, the parent goal should be too
-        goal = self._goals.get(task.goal_id)
-        if goal and status == TaskStatus.IN_PROGRESS and goal.status == GoalStatus.ACTIVE:
-            goal.status = GoalStatus.IN_PROGRESS
+        try:
+            goal = self._get_goal(task.goal_id)
+            if status == TaskStatus.IN_PROGRESS and goal.status == GoalStatus.ACTIVE:
+                goal.status = GoalStatus.IN_PROGRESS
+                self._save_goal(goal)
+        except KeyError:
+            pass
 
         # Auto-complete the goal when every task is COMPLETED
         self._check_auto_complete(task.goal_id)
@@ -174,10 +242,14 @@ class GoalManager:
 
     def _check_auto_complete(self, goal_id: uuid.UUID) -> None:
         """If all tasks for *goal_id* are COMPLETED, mark the goal COMPLETED."""
-        breakdown = self._breakdowns.get(goal_id)
-        if breakdown is None:
+        tasks = self._get_tasks_for_goal(goal_id)
+        if not tasks:
             return
-        if all(t.status == TaskStatus.COMPLETED for t in breakdown.tasks):
-            goal = self._goals.get(goal_id)
-            if goal and goal.status != GoalStatus.CANCELLED:
-                goal.status = GoalStatus.COMPLETED
+        if all(t.status == TaskStatus.COMPLETED for t in tasks):
+            try:
+                goal = self._get_goal(goal_id)
+                if goal.status != GoalStatus.CANCELLED:
+                    goal.status = GoalStatus.COMPLETED
+                    self._save_goal(goal)
+            except KeyError:
+                pass
