@@ -65,12 +65,25 @@ def register_agent(registration: AgentRegistration) -> AgentRegistration:
     """Register an agent with the system.
 
     Creates an agent profile in the trust tracker so the system can
-    track this agent's deployment history and trust level.
+    track this agent's deployment history and trust level.  Also
+    registers the agent with the routing system when available.
     """
     rt = _get_runtime()
     # Create / touch the agent profile in the trust tracker
     rt.trust_tracker.get_profile(registration.agent_id)
     _agent_registrations[registration.agent_id] = registration
+
+    # Bridge into the routing AgentRegistry when available.
+    if rt.agent_registry is not None:
+        rt.register_agent(
+            agent_id=registration.agent_id,
+            name=registration.name,
+            capabilities=registration.capabilities,
+            languages=registration.languages,
+            frameworks=registration.frameworks,
+            max_concurrent_tasks=registration.max_concurrent_tasks,
+        )
+
     return registration
 
 

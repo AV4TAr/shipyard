@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .routes import agents, constraints, goals, pipeline, queue, status, ws
+from .routes import agents, constraints, goals, pipeline, projects, queue, routing, status, ws
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -36,6 +36,8 @@ def create_app() -> FastAPI:
     app.include_router(status.router)
     app.include_router(queue.router)
     app.include_router(constraints.router)
+    app.include_router(projects.router)
+    app.include_router(routing.router)
     app.include_router(ws.router)
 
     # Root route — serve the Command Center SPA

@@ -7,6 +7,7 @@ import uuid
 from src.goals.models import AgentTask, Goal, GoalPriority, GoalStatus
 from src.intent.schema import IntentDeclaration
 from src.pipeline.models import PipelineRun
+from src.routing.models import AgentRegistration
 from src.trust.models import AgentProfile
 
 
@@ -103,3 +104,22 @@ class MemoryIntentRepository:
 
     def list_all(self) -> list[IntentDeclaration]:
         return list(self._store.values())
+
+
+class MemoryAgentRegistrationRepository:
+    """In-memory AgentRegistration repository backed by a dict."""
+
+    def __init__(self) -> None:
+        self._store: dict[str, AgentRegistration] = {}
+
+    def save(self, registration: AgentRegistration) -> None:
+        self._store[registration.agent_id] = registration
+
+    def get(self, agent_id: str) -> AgentRegistration | None:
+        return self._store.get(agent_id)
+
+    def list_all(self) -> list[AgentRegistration]:
+        return list(self._store.values())
+
+    def delete(self, agent_id: str) -> None:
+        self._store.pop(agent_id, None)

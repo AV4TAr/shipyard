@@ -55,13 +55,14 @@ class TestEventType:
             "approval.needed", "approval.granted", "approval.rejected",
             "goal.created", "goal.activated", "goal.completed",
             "agent.registered", "deploy.started", "deploy.completed",
+            "task.routed", "routing.fallback",
             "anomaly.detected",
         ]
         actual = [e.value for e in EventType]
         assert sorted(actual) == sorted(expected)
 
     def test_event_type_count(self):
-        assert len(EventType) == 13
+        assert len(EventType) == 15
 
 
 class TestEventModel:

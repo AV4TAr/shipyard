@@ -304,3 +304,59 @@ def _highlight_pending(value: int, c: _Colors | _NoColors) -> str:
     if value > 0:
         return f"{c.YELLOW}{value}{c.RESET}"
     return f"{c.DIM}{value}{c.RESET}"
+
+
+# ---------------------------------------------------------------------------
+# Project formatters
+# ---------------------------------------------------------------------------
+
+
+def format_project(project: Any) -> str:
+    """Pretty-print a Project model."""
+    c = _get_colors()
+    lines: list[str] = []
+
+    lines.append(f"{c.BOLD}Project: {project.title}{c.RESET}")
+    lines.append(f"  ID:          {project.project_id}")
+    status_val = (
+        project.status.value
+        if hasattr(project.status, "value")
+        else str(project.status)
+    )
+    priority_val = (
+        project.priority.value
+        if hasattr(project.priority, "value")
+        else str(project.priority)
+    )
+    lines.append(f"  Status:      {_colorize_status(status_val)}")
+    lines.append(f"  Priority:    {_colorize_status(priority_val)}")
+    lines.append(f"  Created:     {_format_datetime(project.created_at)}")
+    if project.created_by:
+        lines.append(f"  Created by:  {project.created_by}")
+    lines.append(f"  Description: {project.description}")
+
+    if project.constraints:
+        lines.append(f"\n  {c.BOLD}Constraints:{c.RESET}")
+        for constraint in project.constraints:
+            lines.append(f"    - {constraint}")
+
+    if project.target_services:
+        lines.append(
+            f"\n  {c.BOLD}Services:{c.RESET} {', '.join(project.target_services)}"
+        )
+
+    if project.tags:
+        lines.append(f"\n  {c.BOLD}Tags:{c.RESET} {', '.join(project.tags)}")
+
+    if project.milestones:
+        lines.append(f"\n  {c.BOLD}Milestones ({len(project.milestones)}):{c.RESET}")
+        for ms in project.milestones:
+            ms_status = (
+                ms.status.value if hasattr(ms.status, "value") else str(ms.status)
+            )
+            lines.append(
+                f"    {ms.order}. {ms.title}  "
+                f"[{_colorize_status(ms_status)}]"
+            )
+
+    return "\n".join(lines)

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI-CICD Command Center</title>
+<title>Shipyard Command Center</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <style>
 /* ===== Reset & Base ===== */
@@ -605,6 +605,252 @@ main {
   font-size: 1.25rem;
   font-weight: 700;
 }
+
+/* ===== Tab Transitions ===== */
+main {
+  animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== Loading Spinner ===== */
+.spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+.spinner-lg { width: 32px; height: 32px; border-width: 3px; }
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+
+/* ===== Footer ===== */
+.app-footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.app-footer a { color: var(--blue); text-decoration: none; }
+.app-footer a:hover { text-decoration: underline; }
+
+/* ===== Project Cards ===== */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+}
+.project-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  transition: border-color var(--transition), transform var(--transition);
+  cursor: pointer;
+}
+.project-card:hover { border-color: var(--text-muted); transform: translateY(-1px); }
+.project-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.project-title { font-weight: 600; font-size: 1rem; }
+.project-desc {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.project-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.project-progress .progress-bar { flex: 1; }
+.project-meta {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ===== Milestone List ===== */
+.milestone-list { list-style: none; }
+.milestone-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 0.9rem;
+}
+.milestone-item:last-child { border-bottom: none; }
+.milestone-check {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: transparent;
+}
+.milestone-check.done {
+  border-color: var(--green);
+  background: var(--green-dim);
+  color: var(--green);
+}
+.milestone-check.active {
+  border-color: var(--blue);
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+/* ===== Enhanced Agent Card ===== */
+.agent-status-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.agent-status-dot.available { background: var(--green); }
+.agent-status-dot.busy { background: var(--amber); }
+.agent-status-dot.offline { background: var(--gray); }
+.capability-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+.capability-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+.cap-code { background: var(--blue-dim); color: var(--blue); }
+.cap-test { background: var(--green-dim); color: var(--green); }
+.cap-deploy { background: var(--purple-dim); color: var(--purple); }
+.cap-review { background: var(--amber-dim); color: var(--amber); }
+.cap-default { background: var(--gray-dim); color: var(--gray); }
+
+/* ===== Collapsible Sections ===== */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.5rem 0;
+  user-select: none;
+}
+.collapsible-header:hover { color: var(--text-primary); }
+.collapsible-arrow {
+  transition: transform 0.2s ease;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.collapsible-header.open .collapsible-arrow { transform: rotate(90deg); }
+.collapsible-body {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+}
+.collapsible-body.open { max-height: 1000px; }
+
+/* ===== Signal Results ===== */
+.signal-result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.25rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  background: var(--bg-primary);
+}
+.signal-icon {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+.signal-icon.pass { background: var(--green-dim); color: var(--green); }
+.signal-icon.fail { background: var(--red-dim); color: var(--red); }
+.signal-name { font-weight: 500; flex: 1; }
+.signal-score { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); }
+.signal-findings {
+  padding: 0.5rem 0.75rem 0.5rem 2.75rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* ===== Risk Factors ===== */
+.risk-factors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.risk-factor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+.risk-factor-label { color: var(--text-secondary); }
+.risk-factor-value { font-family: var(--font-mono); font-weight: 600; }
+
+/* ===== Routing Info ===== */
+.routing-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.8rem;
+}
+.match-score {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .project-grid { grid-template-columns: 1fr; }
+  .risk-factors { grid-template-columns: 1fr; }
+}
 </style>
 </head>
 <body>
@@ -629,6 +875,7 @@ main {
     <button data-page="agents">Agents</button>
     <button data-page="queue">Queue</button>
     <button data-page="constraints">Constraints</button>
+    <button data-page="projects">Projects</button>
   </nav>
   <div class="header-status">
     <div class="status-dot" id="connection-dot"></div>
@@ -638,6 +885,12 @@ main {
 
 <!-- ===== Main Content ===== -->
 <main id="app"></main>
+
+<!-- ===== Footer ===== -->
+<footer class="app-footer">
+  <span>Shipyard AI-CICD &mdash; Autonomous Pipeline Management</span>
+  <span>558 tests passing</span>
+</footer>
 
 <!-- ===== Modal Container ===== -->
 <div class="modal-overlay" id="modal-overlay">
@@ -695,6 +948,7 @@ const pages = {
   agents: renderAgents,
   queue: renderQueue,
   constraints: renderConstraints,
+  projects: renderProjects,
 };
 
 function navigate(page) {
@@ -869,7 +1123,7 @@ async function renderDashboard() {
         <span class="card-title">Recent Activity</span>
       </div>
       <div class="card-body" id="activity-feed-body">
-        <div class="empty-state"><div class="empty-state-text">Loading activity...</div></div>
+        <div class="loading-state"><div class="spinner"></div><span>Loading activity...</span></div>
       </div>
     </div>
   `;
@@ -914,7 +1168,7 @@ async function renderGoals() {
     </div>
     <div class="card">
       <div class="card-body" id="goals-body" style="padding:0">
-        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+        <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading...</span></div>
       </div>
     </div>
   `;
@@ -978,6 +1232,7 @@ async function loadGoalsTable() {
 }
 
 async function loadGoalTasks(goalId) {
+  // All dynamic text escaped via escapeHtml() to prevent XSS
   const container = document.getElementById(`goal-tasks-${goalId}`);
   try {
     const data = await api.get(`/goals/${goalId}`);
@@ -988,18 +1243,44 @@ async function loadGoalTasks(goalId) {
     }
     container.innerHTML = `
       <table class="data-table" style="margin:-1rem">
-        <thead><tr><th>Task</th><th>Status</th><th>Type</th></tr></thead>
-        <tbody>${tasks.map(t => `
+        <thead><tr><th>Task</th><th>Status</th><th>Type</th><th>Agent</th><th>Actions</th></tr></thead>
+        <tbody>${tasks.map(t => {
+          const agentId = t.assigned_agent || t.agent_id || null;
+          const matchScore = t.match_score ?? t.routing_score ?? null;
+          const matchReasons = t.match_reasons || t.routing_reasons || [];
+          return `
           <tr>
             <td><span class="mono">${truncateId(t.task_id)}</span> ${escapeHtml(t.title || t.description || '')}</td>
             <td>${statusBadge(t.status)}</td>
             <td><span style="color:var(--text-muted)">${escapeHtml(t.task_type || '---')}</span></td>
-          </tr>
-        `).join('')}</tbody>
+            <td>
+              ${agentId ? `
+                <div>
+                  <span class="mono">${truncateId(agentId)}</span>
+                  ${matchScore !== null ? `<span class="match-score badge badge-blue">${(matchScore * 100).toFixed(0)}%</span>` : ''}
+                </div>
+                ${matchReasons.length > 0 ? `<div class="routing-info">${matchReasons.slice(0, 3).map(r => `<span class="badge badge-gray" style="font-size:0.65rem">${escapeHtml(r)}</span>`).join('')}</div>` : ''}
+              ` : '<span style="color:var(--text-muted)">unassigned</span>'}
+            </td>
+            <td>
+              ${!agentId && (t.status === 'pending' || t.status === 'ready') ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();routeTask('${t.task_id}','${goalId}')">Route</button>` : ''}
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
       </table>
     `;
   } catch (e) {
     container.innerHTML = `<p style="color:var(--red)">Failed to load tasks: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function routeTask(taskId, goalId) {
+  try {
+    await api.post(`/routing/route/${taskId}`);
+    toast('Task routed to best available agent', 'success');
+    await loadGoalTasks(goalId);
+  } catch (e) {
+    toast(`Failed to route task: ${e.message}`, 'error');
   }
 }
 
@@ -1098,7 +1379,7 @@ async function renderPipeline() {
     </div>
     <div class="card">
       <div class="card-body" id="pipeline-body" style="padding:0">
-        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+        <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading...</span></div>
       </div>
     </div>
   `;
@@ -1167,8 +1448,9 @@ async function loadPipelineTable() {
 }
 
 function renderRunStages(runId, run) {
+  // Note: all dynamic values are escaped via escapeHtml() before insertion
   const container = document.getElementById(`run-stages-${runId}`);
-  if (!run) { container.innerHTML = 'No data'; return; }
+  if (!run) { container.textContent = 'No data'; return; }
 
   const allStages = ['INTENT', 'SANDBOX', 'VALIDATION', 'TRUST_ROUTING', 'DEPLOY'];
   const currentStage = (run.current_stage || '').toUpperCase();
@@ -1194,11 +1476,19 @@ function renderRunStages(runId, run) {
     detailHtml = '<div style="margin-top:1rem">';
     for (const [stage, result] of Object.entries(stageResults)) {
       const passed = result.passed || result.success;
-      detailHtml += `<div style="margin-bottom:0.5rem">
-        <strong style="text-transform:uppercase">${escapeHtml(stage)}</strong>:
-        <span class="badge badge-${passed ? 'green' : 'red'}">${passed ? 'passed' : 'failed'}</span>
-        ${result.message ? `<span style="color:var(--text-muted);margin-left:0.5rem">${escapeHtml(result.message)}</span>` : ''}
-      </div>`;
+      const stageId = `stage-${escapeHtml(runId)}-${escapeHtml(stage)}`;
+      detailHtml += `
+        <div style="margin-bottom:0.25rem">
+          <div class="collapsible-header" onclick="toggleCollapsible('${stageId}', this)">
+            <span class="collapsible-arrow">&#9654;</span>
+            <span class="signal-icon ${passed ? 'pass' : 'fail'}">${passed ? '&#10003;' : '&#10007;'}</span>
+            <strong style="text-transform:uppercase;flex:1">${escapeHtml(stage)}</strong>
+            <span class="badge badge-${passed ? 'green' : 'red'}">${passed ? 'passed' : 'failed'}</span>
+          </div>
+          <div class="collapsible-body" id="${stageId}">
+            ${renderStageDetail(stage, result)}
+          </div>
+        </div>`;
     }
     detailHtml += '</div>';
   }
@@ -1211,6 +1501,69 @@ function renderRunStages(runId, run) {
   extraHtml += '</div>';
 
   container.innerHTML = stagesHtml + detailHtml + extraHtml;
+}
+
+function toggleCollapsible(id, header) {
+  const body = document.getElementById(id);
+  if (!body) return;
+  header.classList.toggle('open');
+  body.classList.toggle('open');
+}
+
+// All values rendered via escapeHtml() to prevent XSS
+function renderStageDetail(stage, result) {
+  const stageLower = stage.toLowerCase();
+
+  // Validation stage: show individual signal results
+  if (stageLower === 'validation') {
+    const signals = result.signals || result.signal_results || {};
+    if (Object.keys(signals).length > 0) {
+      return Object.entries(signals).map(([name, sig]) => {
+        const sigPassed = sig.passed !== undefined ? sig.passed : (sig.score >= 0.5);
+        const findings = sig.findings || sig.issues || [];
+        return `
+          <div class="signal-result">
+            <span class="signal-icon ${sigPassed ? 'pass' : 'fail'}">${sigPassed ? '&#10003;' : '&#10007;'}</span>
+            <span class="signal-name">${escapeHtml(name.replace(/_/g, ' '))}</span>
+            ${sig.score !== undefined ? `<span class="signal-score">${(sig.score * 100).toFixed(0)}%</span>` : ''}
+            <span class="badge badge-${sigPassed ? 'green' : 'red'} btn-sm">${sigPassed ? 'pass' : 'fail'}</span>
+          </div>
+          ${findings.length > 0 ? `<div class="signal-findings">${findings.map(f => `<div style="margin-bottom:0.25rem">- ${escapeHtml(typeof f === 'string' ? f : f.message || JSON.stringify(f))}</div>`).join('')}</div>` : ''}
+        `;
+      }).join('');
+    }
+    return `<div style="padding:0.5rem;color:var(--text-muted);font-size:0.85rem">${result.message ? escapeHtml(result.message) : 'No signal details available'}</div>`;
+  }
+
+  // Trust routing stage: show risk breakdown
+  if (stageLower === 'trust_routing') {
+    let html = '';
+    if (result.risk_score !== undefined) {
+      const riskPct = (result.risk_score * 100).toFixed(0);
+      const riskColor = result.risk_score >= 0.7 ? 'var(--red)' : result.risk_score >= 0.4 ? 'var(--amber)' : 'var(--green)';
+      html += `<div style="padding:0.5rem 0.75rem;font-size:0.85rem">
+        <span style="color:var(--text-secondary)">Risk Score:</span>
+        <span style="font-family:var(--font-mono);font-weight:700;color:${riskColor};margin-left:0.5rem">${riskPct}%</span>
+        ${result.deploy_route ? `<span style="margin-left:1rem;color:var(--text-secondary)">Route:</span> ${statusBadge(result.deploy_route)}` : ''}
+      </div>`;
+    }
+    const factors = result.factors || result.risk_factors || {};
+    if (Object.keys(factors).length > 0) {
+      html += '<div class="risk-factors">';
+      for (const [key, val] of Object.entries(factors)) {
+        const display = typeof val === 'number' ? (val * 100).toFixed(0) + '%' : String(val);
+        html += `<div class="risk-factor">
+          <span class="risk-factor-label">${escapeHtml(key.replace(/_/g, ' '))}</span>
+          <span class="risk-factor-value">${escapeHtml(display)}</span>
+        </div>`;
+      }
+      html += '</div>';
+    }
+    return html || `<div style="padding:0.5rem;color:var(--text-muted);font-size:0.85rem">${result.message ? escapeHtml(result.message) : 'No routing details available'}</div>`;
+  }
+
+  // Default: show message
+  return `<div style="padding:0.5rem 0.75rem;color:var(--text-secondary);font-size:0.85rem">${result.message ? escapeHtml(result.message) : 'No additional details'}</div>`;
 }
 
 function showApproveDialog(runId) {
@@ -1285,34 +1638,59 @@ async function renderAgents() {
       <h1 class="section-title">Agents</h1>
     </div>
     <div id="agents-grid" class="agent-grid">
-      <div class="empty-state" style="grid-column:1/-1"><div class="empty-state-text">Loading...</div></div>
+      <div class="loading-state" style="grid-column:1/-1"><div class="spinner spinner-lg"></div><span>Loading agents...</span></div>
     </div>
   `;
 
   const container = document.getElementById('agents-grid');
+  let agents;
   try {
-    const agents = await api.get('/agents');
+    // Try routing endpoint first for richer data, fall back to basic agents endpoint
+    try {
+      agents = await api.get('/routing/agents');
+    } catch (_) {
+      agents = await api.get('/agents');
+    }
     if (!agents || agents.length === 0) {
       container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">&#9881;</div><div class="empty-state-text">No agents registered.</div></div>';
       return;
     }
+    // All dynamic text escaped via escapeHtml() to prevent XSS
     container.innerHTML = agents.map(a => {
       const trustScore = a.overall_trust ?? a.trust_score ?? 0.5;
       const totalDeploys = a.total_deploys ?? a.deploy_count ?? 0;
       const successRate = a.success_rate ?? (totalDeploys > 0 ? ((a.successful_deploys || 0) / totalDeploys * 100) : 0);
       const initials = (a.name || a.agent_id || '??').substring(0, 2).toUpperCase();
       const domainScores = a.domain_trust || a.trust_scores || {};
+      const agentStatus = a.status || 'available';
+      const queueDepth = a.queue_depth ?? a.task_count ?? null;
+      const capabilities = a.capabilities || [];
 
       return `
         <div class="agent-card" onclick="this.classList.toggle('expanded')">
           <div class="agent-card-header">
             <div class="agent-avatar">${escapeHtml(initials)}</div>
-            <div>
-              <div class="agent-name">${escapeHtml(a.name || a.agent_id || 'Unknown Agent')}</div>
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:0.5rem">
+                <div class="agent-name">${escapeHtml(a.name || a.agent_id || 'Unknown Agent')}</div>
+                <div class="agent-status-dot ${escapeHtml(agentStatus)}" title="${escapeHtml(agentStatus)}"></div>
+              </div>
               <div class="agent-id">${truncateId(a.agent_id)}</div>
             </div>
+            ${queueDepth !== null ? `<div style="text-align:right">
+              <div class="agent-stat-value">${queueDepth}</div>
+              <div class="agent-stat-label">queued</div>
+            </div>` : ''}
           </div>
-          <div>
+          ${capabilities.length > 0 ? `<div class="capability-badges">${capabilities.map(c => {
+            const capLower = (c || '').toLowerCase();
+            const capCls = capLower.includes('code') || capLower.includes('implement') ? 'cap-code' :
+                           capLower.includes('test') ? 'cap-test' :
+                           capLower.includes('deploy') ? 'cap-deploy' :
+                           capLower.includes('review') ? 'cap-review' : 'cap-default';
+            return `<span class="capability-badge ${capCls}">${escapeHtml(c)}</span>`;
+          }).join('')}</div>` : ''}
+          <div style="margin-top:0.75rem">
             <div style="display:flex;justify-content:space-between;font-size:0.8rem">
               <span style="color:var(--text-muted)">Trust Score</span>
               <span class="mono" style="color:${trustColor(trustScore)}">${(trustScore * 100).toFixed(0)}%</span>
@@ -1330,6 +1708,10 @@ async function renderAgents() {
               <div class="agent-stat-label">Success</div>
               <div class="agent-stat-value">${typeof successRate === 'number' ? successRate.toFixed(0) : successRate}%</div>
             </div>
+            <div>
+              <div class="agent-stat-label">Status</div>
+              <div class="agent-stat-value" style="text-transform:capitalize">${escapeHtml(agentStatus)}</div>
+            </div>
           </div>
           <div class="agent-detail">
             <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;font-weight:600">Domain Trust</div>
@@ -1344,7 +1726,6 @@ async function renderAgents() {
                 </div>
               </div>
             `).join('') : '<p style="color:var(--text-muted);font-size:0.85rem">No domain-specific data</p>'}
-            ${a.capabilities ? `<div style="margin-top:0.75rem"><span style="font-size:0.8rem;color:var(--text-muted)">Capabilities: </span>${a.capabilities.map(c => `<span class="badge badge-blue" style="margin-right:0.25rem">${escapeHtml(c)}</span>`).join('')}</div>` : ''}
           </div>
         </div>
       `;
@@ -1363,7 +1744,7 @@ async function renderQueue() {
     </div>
     <div class="card">
       <div class="card-body" id="queue-body" style="padding:0">
-        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+        <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading...</span></div>
       </div>
     </div>
   `;
@@ -1402,7 +1783,7 @@ async function renderConstraints() {
     </div>
     <div class="card">
       <div class="card-body" id="constraints-body" style="padding:0">
-        <div class="empty-state"><div class="empty-state-text">Loading...</div></div>
+        <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading...</span></div>
       </div>
     </div>
   `;
@@ -1433,6 +1814,213 @@ async function renderConstraints() {
     `;
   } catch (e) {
     body.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+// ===== Projects =====
+async function renderProjects() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Projects</h1>
+      <button class="btn btn-primary" onclick="showNewProjectModal()">+ New Project</button>
+    </div>
+    <div id="projects-container" class="project-grid">
+      <div class="loading-state" style="grid-column:1/-1"><div class="spinner spinner-lg"></div><span>Loading projects...</span></div>
+    </div>
+  `;
+  await loadProjectsList();
+}
+
+async function loadProjectsList() {
+  // All dynamic text escaped via escapeHtml() to prevent XSS
+  const container = document.getElementById('projects-container');
+  try {
+    const projects = await api.get('/projects');
+    if (!projects || projects.length === 0) {
+      container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">&#9744;</div><div class="empty-state-text">No projects yet. Create one to get started.</div></div>';
+      return;
+    }
+    container.innerHTML = projects.map(p => {
+      const milestones = p.milestones || [];
+      const completedMs = milestones.filter(m => m.status === 'completed' || m.status === 'done').length;
+      const totalMs = milestones.length;
+      const progressPct = totalMs > 0 ? (completedMs / totalMs * 100) : 0;
+      const projectStatus = p.status || 'draft';
+      return `
+        <div class="project-card" onclick="showProjectDetail('${escapeHtml(p.project_id || p.id)}')">
+          <div class="project-card-header">
+            <div class="project-title">${escapeHtml(p.title || p.name || 'Untitled')}</div>
+            ${statusBadge(projectStatus)}
+          </div>
+          <div class="project-desc">${escapeHtml(p.description || 'No description')}</div>
+          ${totalMs > 0 ? `
+            <div class="project-progress">
+              <div class="progress-bar">
+                <div class="progress-fill" style="width:${progressPct}%;background:${progressPct >= 100 ? 'var(--green)' : 'var(--blue)'}"></div>
+              </div>
+              <span>${completedMs}/${totalMs}</span>
+            </div>
+          ` : ''}
+          <div class="project-meta">
+            ${p.priority ? `<span>${priorityBadge(p.priority)}</span>` : ''}
+            ${p.created_at ? `<span>${formatDate(p.created_at)}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+async function showProjectDetail(projectId) {
+  // All dynamic text escaped via escapeHtml() to prevent XSS
+  showModal(`
+    <div class="modal-header">
+      <span class="modal-title">Project Details</span>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>
+    </div>
+  `);
+
+  try {
+    const p = await api.get(`/projects/${projectId}`);
+    const milestones = p.milestones || [];
+    const completedMs = milestones.filter(m => m.status === 'completed' || m.status === 'done').length;
+    const totalMs = milestones.length;
+    const progressPct = totalMs > 0 ? (completedMs / totalMs * 100) : 0;
+    const projectStatus = p.status || 'draft';
+
+    let milestonesHtml = '';
+    if (milestones.length > 0) {
+      milestonesHtml = `
+        <div style="margin-top:1.25rem">
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;font-weight:600">Milestones</div>
+          <div class="project-progress" style="margin-bottom:0.75rem">
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${progressPct}%;background:${progressPct >= 100 ? 'var(--green)' : 'var(--blue)'}"></div>
+            </div>
+            <span style="font-size:0.8rem;color:var(--text-muted)">${completedMs}/${totalMs} complete</span>
+          </div>
+          <ul class="milestone-list">
+            ${milestones.map(m => {
+              const mStatus = (m.status || 'pending').toLowerCase();
+              const checkCls = mStatus === 'completed' || mStatus === 'done' ? 'done' :
+                               mStatus === 'active' || mStatus === 'in_progress' ? 'active' : '';
+              const checkMark = mStatus === 'completed' || mStatus === 'done' ? '&#10003;' :
+                                mStatus === 'active' || mStatus === 'in_progress' ? '&#9679;' : '';
+              return `<li class="milestone-item">
+                <div class="milestone-check ${checkCls}">${checkMark}</div>
+                <div style="flex:1">
+                  <div style="font-weight:500">${escapeHtml(m.title || m.name || 'Milestone')}</div>
+                  ${m.description ? `<div style="font-size:0.8rem;color:var(--text-muted)">${escapeHtml(m.description)}</div>` : ''}
+                </div>
+                ${statusBadge(m.status || 'pending')}
+              </li>`;
+            }).join('')}
+          </ul>
+        </div>
+      `;
+    }
+
+    document.getElementById('modal-content').innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">${escapeHtml(p.title || p.name || 'Project')}</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display:flex;gap:0.75rem;margin-bottom:1rem">
+          ${statusBadge(projectStatus)}
+          ${p.priority ? priorityBadge(p.priority) : ''}
+        </div>
+        <p style="color:var(--text-secondary);margin-bottom:1rem">${escapeHtml(p.description || 'No description')}</p>
+        ${milestonesHtml}
+      </div>
+      ${projectStatus === 'draft' ? `
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+          <button class="btn btn-success" onclick="activateProject('${escapeHtml(projectId)}')">Activate Project</button>
+        </div>
+      ` : `
+        <div class="modal-footer">
+          <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+        </div>
+      `}
+    `;
+  } catch (e) {
+    document.getElementById('modal-content').innerHTML = `
+      <div class="modal-header">
+        <span class="modal-title">Error</span>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="empty-state"><div class="empty-state-text">Failed to load project: ${escapeHtml(e.message)}</div></div>
+      </div>
+    `;
+  }
+}
+
+async function activateProject(projectId) {
+  try {
+    await api.post(`/projects/${projectId}/activate`);
+    closeModal();
+    toast('Project activated', 'success');
+    await loadProjectsList();
+  } catch (e) {
+    toast(`Failed to activate project: ${e.message}`, 'error');
+  }
+}
+
+function showNewProjectModal() {
+  showModal(`
+    <div class="modal-header">
+      <span class="modal-title">Create New Project</span>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" id="project-title" placeholder="e.g. API v2 Redesign" autofocus>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-textarea" id="project-description" placeholder="Describe the project scope and objectives..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Priority</label>
+        <select class="form-select" id="project-priority">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitNewProject()">Create Project</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('project-title')?.focus(), 100);
+}
+
+async function submitNewProject() {
+  const title = document.getElementById('project-title').value.trim();
+  const description = document.getElementById('project-description').value.trim();
+  const priority = document.getElementById('project-priority').value;
+
+  if (!title) { toast('Title is required', 'error'); return; }
+  if (!description) { toast('Description is required', 'error'); return; }
+
+  try {
+    await api.post('/projects', { title, description, priority });
+    closeModal();
+    toast('Project created successfully', 'success');
+    await loadProjectsList();
+  } catch (e) {
+    toast(`Failed to create project: ${e.message}`, 'error');
   }
 }
 
@@ -1480,6 +2068,8 @@ function handleWsMessage(msg) {
     toast('New run requires approval', 'info');
     if (currentPage === 'dashboard') renderDashboard();
     if (currentPage === 'pipeline') loadPipelineTable();
+  } else if (type === 'project_update') {
+    if (currentPage === 'projects') loadProjectsList();
   }
 }
 

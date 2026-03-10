@@ -28,11 +28,29 @@ from src.goals.models import (
 from src.intent.registry import IntentRegistry
 from src.pipeline.models import PipelineRun, PipelineStatus
 from src.pipeline.orchestrator import PipelineOrchestrator
+from src.projects.manager import ProjectManager
+from src.projects.models import Project, ProjectInput
+from src.projects.models import ProjectStatus as ProjStatus
+from src.projects.planner import ProjectPlanner
+from src.routing.integration import RoutingBridge
+from src.routing.models import AgentCapability, RouteDecision
+from src.routing.models import AgentRegistration as RoutingAgentRegistration
+from src.routing.registry import AgentRegistry
+from src.routing.router import TaskRouter
 from src.sandbox.manager import SandboxManager
 from src.trust.models import AgentProfile
 from src.trust.scorer import RiskScorer
 from src.trust.tracker import TrustTracker
 from src.validation.gate import ValidationGate
+
+
+def _capability_from_string(value: str) -> AgentCapability:
+    """Convert a string capability to :class:`AgentCapability`, falling
+    back to ``GENERIC`` for unknown values."""
+    try:
+        return AgentCapability(value.lower())
+    except ValueError:
+        return AgentCapability.GENERIC
 
 
 class CLIRuntime:
@@ -51,7 +69,11 @@ class CLIRuntime:
         claim_manager: ClaimManager,
         deploy_queue: DeployQueue,
         intent_registry: IntentRegistry,
+        agent_registry: AgentRegistry | None = None,
+        task_router: TaskRouter | None = None,
+        routing_bridge: RoutingBridge | None = None,
         event_dispatcher: Any | None = None,
+        project_manager: ProjectManager | None = None,
     ) -> None:
         self.goal_manager = goal_manager
         self.orchestrator = orchestrator
@@ -59,7 +81,11 @@ class CLIRuntime:
         self.claim_manager = claim_manager
         self.deploy_queue = deploy_queue
         self.intent_registry = intent_registry
+        self.agent_registry = agent_registry
+        self.task_router = task_router
+        self.routing_bridge = routing_bridge
         self.event_dispatcher = event_dispatcher
+        self.project_manager = project_manager
 
     # ------------------------------------------------------------------
     # Factory methods
@@ -135,6 +161,16 @@ class CLIRuntime:
             event_dispatcher=event_dispatcher,
         )
 
+        agent_registry = AgentRegistry(
+            registration_repo=storage.agent_registrations,
+        )
+        task_router = TaskRouter(agent_registry, trust_tracker=trust_tracker)
+        routing_bridge = RoutingBridge(
+            task_router, event_dispatcher=event_dispatcher
+        )
+
+        project_manager = ProjectManager(goal_manager=goal_manager)
+
         return cls(
             goal_manager=goal_manager,
             orchestrator=orchestrator,
@@ -142,7 +178,11 @@ class CLIRuntime:
             claim_manager=claim_manager,
             deploy_queue=deploy_queue,
             intent_registry=intent_registry,
+            agent_registry=agent_registry,
+            task_router=task_router,
+            routing_bridge=routing_bridge,
             event_dispatcher=event_dispatcher,
+            project_manager=project_manager,
         )
 
     @classmethod
@@ -215,6 +255,107 @@ class CLIRuntime:
         """Cancel a goal and its outstanding tasks."""
         uid = uuid.UUID(goal_id)
         return self.goal_manager.cancel(uid)
+
+    # ------------------------------------------------------------------
+    # Project commands
+    # ------------------------------------------------------------------
+
+    def _ensure_project_manager(self) -> ProjectManager:
+        """Return the project manager, raising if not configured."""
+        if self.project_manager is None:
+            raise RuntimeError("ProjectManager is not configured")
+        return self.project_manager
+
+    def create_project(
+        self,
+        *,
+        title: str,
+        description: str,
+        constraints: list[str] | None = None,
+        priority: str = "medium",
+        target_services: list[str] | None = None,
+        tags: list[str] | None = None,
+    ) -> Project:
+        """Create a new project from CLI/API input."""
+        pm = self._ensure_project_manager()
+        project_input = ProjectInput(
+            title=title,
+            description=description,
+            constraints=constraints or [],
+            priority=GoalPriority(priority),
+            target_services=target_services or [],
+            tags=tags or [],
+        )
+        return pm.create(project_input, created_by="cli-user")
+
+    def list_projects(
+        self, status: str | None = None
+    ) -> list[Project]:
+        """List projects with optional status filter."""
+        pm = self._ensure_project_manager()
+        status_enum = ProjStatus(status) if status else None
+        return pm.list_projects(status=status_enum)
+
+    def show_project(self, project_id: str) -> Project:
+        """Return a project by ID."""
+        pm = self._ensure_project_manager()
+        uid = uuid.UUID(project_id)
+        return pm.get(uid)
+
+    def activate_project(self, project_id: str) -> Project:
+        """Plan milestones and activate a project."""
+        pm = self._ensure_project_manager()
+        uid = uuid.UUID(project_id)
+        project = pm.get(uid)
+        if project.status == ProjStatus.DRAFT:
+            pm.plan(uid)
+            planner = ProjectPlanner()
+            milestones = planner.plan(project)
+            for ms in milestones:
+                pm.add_milestone(
+                    uid,
+                    title=ms.title,
+                    description=ms.description,
+                    order=ms.order,
+                    acceptance_criteria=ms.acceptance_criteria,
+                )
+        return pm.activate(uid)
+
+    def cancel_project(self, project_id: str) -> Project:
+        """Cancel a project."""
+        pm = self._ensure_project_manager()
+        uid = uuid.UUID(project_id)
+        return pm.cancel(uid)
+
+    def list_project_milestones(self, project_id: str) -> list[Any]:
+        """Return milestones for a project."""
+        pm = self._ensure_project_manager()
+        uid = uuid.UUID(project_id)
+        project = pm.get(uid)
+        return list(project.milestones)
+
+    def complete_milestone(self, project_id: str, milestone_id: str) -> Any:
+        """Complete a milestone within a project."""
+        pm = self._ensure_project_manager()
+        return pm.complete_milestone(
+            uuid.UUID(project_id), uuid.UUID(milestone_id)
+        )
+
+    def list_project_goals(self, project_id: str) -> list[Goal]:
+        """Return all goals linked to a project's milestones."""
+        pm = self._ensure_project_manager()
+        uid = uuid.UUID(project_id)
+        project = pm.get(uid)
+        goal_ids: list[uuid.UUID] = []
+        for ms in project.milestones:
+            goal_ids.extend(ms.goal_ids)
+        goals: list[Goal] = []
+        for gid in goal_ids:
+            try:
+                goals.append(self.goal_manager.get(gid))
+            except KeyError:
+                pass
+        return goals
 
     # ------------------------------------------------------------------
     # Status dashboard
@@ -311,6 +452,66 @@ class CLIRuntime:
         # Sort by start time descending, then limit
         runs.sort(key=lambda r: r.started_at, reverse=True)
         return runs[:limit]
+
+    # ------------------------------------------------------------------
+    # Routing
+    # ------------------------------------------------------------------
+
+    def register_agent(
+        self,
+        *,
+        agent_id: str,
+        name: str,
+        capabilities: list[str],
+        languages: list[str] | None = None,
+        frameworks: list[str] | None = None,
+        max_concurrent_tasks: int = 1,
+    ) -> RoutingAgentRegistration:
+        """Register an agent with the routing system."""
+        if self.agent_registry is None:
+            raise RuntimeError("Routing not initialised")
+        caps = [_capability_from_string(c) for c in capabilities]
+        primary = caps[0] if caps else AgentCapability.GENERIC
+        registration = RoutingAgentRegistration(
+            agent_id=agent_id,
+            name=name,
+            capabilities=caps,
+            primary_capability=primary,
+            languages=languages or [],
+            frameworks=frameworks or [],
+            max_concurrent_tasks=max_concurrent_tasks,
+        )
+        self.agent_registry.register(registration)
+        # Ensure a trust profile exists for this agent.
+        self.trust_tracker.get_profile(agent_id)
+        return registration
+
+    def list_registered_agents(self) -> list[RoutingAgentRegistration]:
+        """Return all agents registered in the routing system."""
+        if self.agent_registry is None:
+            return []
+        return self.agent_registry.list_agents()
+
+    def route_task(self, task_id: str) -> RouteDecision:
+        """Route a single task by ID."""
+        if self.task_router is None:
+            raise RuntimeError("Routing not initialised")
+        uid = uuid.UUID(task_id)
+        # Find the task across all goals.
+        for goal in self.goal_manager.list_goals():
+            for task in self.goal_manager.get_tasks(goal.goal_id):
+                if task.task_id == uid:
+                    return self.task_router.route(task)
+        raise KeyError(f"Task {task_id} not found")
+
+    def auto_route_goal(self, goal_id: str) -> list[RouteDecision]:
+        """Auto-route all ready tasks for a goal."""
+        if self.routing_bridge is None:
+            raise RuntimeError("Routing not initialised")
+        uid = uuid.UUID(goal_id)
+        return self.routing_bridge.auto_route_goal(
+            uid, self.goal_manager, self.orchestrator
+        )
 
     # ------------------------------------------------------------------
     # Deploy queue

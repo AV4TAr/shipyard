@@ -28,3 +28,14 @@ class RunRejectRequest(BaseModel):
     """Request body for rejecting a pipeline run."""
 
     reason: str
+
+
+class ProjectCreateRequest(BaseModel):
+    """Request body for creating a project."""
+
+    title: str
+    description: str
+    constraints: list[str] = Field(default_factory=list)
+    priority: str = "medium"
+    target_services: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)

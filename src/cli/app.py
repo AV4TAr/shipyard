@@ -13,14 +13,13 @@ from __future__ import annotations
 
 import argparse
 import sys
-import uuid
 from typing import Sequence
 
 from .formatters import (
     format_agent,
     format_goal,
     format_goal_with_tasks,
-    format_run,
+    format_project,
     format_status_dashboard,
     format_table,
 )
@@ -94,6 +93,37 @@ def build_parser() -> argparse.ArgumentParser:
     gx = goal_sub.add_parser("cancel", help="Cancel a goal")
     gx.add_argument("goal_id", help="Goal UUID to cancel")
 
+    # -- project ------------------------------------------------------------
+    proj_parser = sub.add_parser("project", help="Manage projects")
+    proj_sub = proj_parser.add_subparsers(
+        dest="project_action", help="Project actions"
+    )
+
+    pc = proj_sub.add_parser("create", help="Create a new project")
+    pc.add_argument("--title", required=True, help="Short title for the project")
+    pc.add_argument("--description", required=True, help="What the project is about")
+    pc.add_argument(
+        "--constraints", nargs="*", default=[],
+        help="Constraints the project must respect",
+    )
+    pc.add_argument(
+        "--priority", choices=["low", "medium", "high", "urgent"],
+        default="medium", help="Project priority (default: medium)",
+    )
+    pc.add_argument("--services", nargs="*", default=[], help="Target services")
+    pc.add_argument("--tags", nargs="*", default=[], help="Tags for the project")
+
+    pl = proj_sub.add_parser("list", help="List projects")
+    pl.add_argument("--status", default=None, help="Filter by status")
+
+    ps = proj_sub.add_parser("show", help="Show project details")
+    ps.add_argument("project_id", help="Project UUID")
+
+    pa = proj_sub.add_parser(
+        "activate", help="Activate a project (plan milestones and start)"
+    )
+    pa.add_argument("project_id", help="Project UUID to activate")
+
     # -- status -------------------------------------------------------------
     sub.add_parser("status", help="Show system status dashboard")
 
@@ -107,9 +137,23 @@ def build_parser() -> argparse.ArgumentParser:
     rj.add_argument("run_id", help="Pipeline run UUID")
     rj.add_argument("--reason", required=True, help="Reason for rejection (sent to agent)")
 
+    # -- route --------------------------------------------------------------
+    rt = sub.add_parser("route", help="Auto-route all tasks for a goal")
+    rt.add_argument("goal_id", help="Goal UUID to route tasks for")
+
     # -- agents -------------------------------------------------------------
     ag = sub.add_parser("agents", help="List agents and trust scores")
     ag.add_argument("--agent", default=None, help="Show details for a specific agent")
+    ag_sub = ag.add_subparsers(dest="agents_action", help="Agent actions")
+
+    ag_reg = ag_sub.add_parser("register", help="Register a new agent")
+    ag_reg.add_argument("--id", required=True, dest="agent_id", help="Agent ID")
+    ag_reg.add_argument("--name", required=True, help="Agent display name")
+    ag_reg.add_argument(
+        "--capabilities",
+        required=True,
+        help="Comma-separated capabilities (e.g. frontend,backend)",
+    )
 
     # -- runs ---------------------------------------------------------------
     rn = sub.add_parser("runs", help="List recent pipeline runs")
@@ -179,7 +223,8 @@ def _handle_goal(runtime: CLIRuntime, args: argparse.Namespace) -> int:
             return 1
         print(f"Goal activated with {len(breakdown.tasks)} task(s):")
         for task in breakdown.tasks:
-            risk = task.estimated_risk.value if hasattr(task.estimated_risk, "value") else str(task.estimated_risk)
+            er = task.estimated_risk
+            risk = er.value if hasattr(er, "value") else str(er)
             print(f"  - {task.title}  [risk: {risk}]")
         return 0
 
@@ -202,6 +247,65 @@ def _handle_goal(runtime: CLIRuntime, args: argparse.Namespace) -> int:
         return 0
 
     print("Usage: ai-cicd goal {create,list,activate,show,cancel}", file=sys.stderr)
+    return 1
+
+
+def _handle_project(runtime: CLIRuntime, args: argparse.Namespace) -> int:
+    """Dispatch project sub-commands."""
+    if args.project_action == "create":
+        project = runtime.create_project(
+            title=args.title,
+            description=args.description,
+            constraints=args.constraints,
+            priority=args.priority,
+            target_services=args.services,
+            tags=args.tags,
+        )
+        print(format_project(project))
+        print(f"\nProject created: {project.project_id}")
+        return 0
+
+    if args.project_action == "list":
+        projects = runtime.list_projects(status=args.status)
+        if not projects:
+            print("No projects found.")
+            return 0
+        headers = ["ID", "Title", "Status", "Priority", "Milestones"]
+        rows: list[list[str]] = []
+        for p in projects:
+            rows.append([
+                str(p.project_id)[:8],
+                p.title[:40],
+                p.status.value,
+                p.priority.value,
+                str(len(p.milestones)),
+            ])
+        print(format_table(headers, rows))
+        return 0
+
+    if args.project_action == "show":
+        try:
+            project = runtime.show_project(args.project_id)
+        except (KeyError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(format_project(project))
+        return 0
+
+    if args.project_action == "activate":
+        try:
+            project = runtime.activate_project(args.project_id)
+        except (KeyError, ValueError) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        print(format_project(project))
+        print(f"\nProject activated with {len(project.milestones)} milestone(s)")
+        return 0
+
+    print(
+        "Usage: ai-cicd project {create,list,show,activate}",
+        file=sys.stderr,
+    )
     return 1
 
 
@@ -232,18 +336,66 @@ def _handle_reject(runtime: CLIRuntime, args: argparse.Namespace) -> int:
     return 0
 
 
+def _handle_route(runtime: CLIRuntime, args: argparse.Namespace) -> int:
+    """Auto-route all tasks for a goal."""
+    try:
+        decisions = runtime.auto_route_goal(args.goal_id)
+    except (KeyError, ValueError, RuntimeError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    if not decisions:
+        print("No tasks ready to route.")
+        return 0
+
+    headers = ["Task", "Agent", "Score", "Fallback"]
+    rows = []
+    for d in decisions:
+        rows.append([
+            d.task_id[:8] if d.task_id else "-",
+            d.selected_agent_id or "(none)",
+            f"{d.match_score:.4f}",
+            "yes" if d.fallback_used else "no",
+        ])
+    print(format_table(headers, rows))
+    return 0
+
+
 def _handle_agents(runtime: CLIRuntime, args: argparse.Namespace) -> int:
+    # Handle register subcommand.
+    if getattr(args, "agents_action", None) == "register":
+        caps = [c.strip() for c in args.capabilities.split(",") if c.strip()]
+        try:
+            reg = runtime.register_agent(
+                agent_id=args.agent_id,
+                name=args.name,
+                capabilities=caps,
+            )
+        except RuntimeError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+        cap_str = ", ".join(c.value for c in reg.capabilities)
+        print(f"Agent registered: {reg.agent_id} ({reg.name})")
+        print(f"  Capabilities: {cap_str}")
+        return 0
+
     if args.agent:
         profile = runtime.get_agent(args.agent)
         print(format_agent(profile))
         return 0
 
+    # Build a capabilities lookup from the routing registry.
+    cap_map: dict[str, str] = {}
+    registered = runtime.list_registered_agents()
+    for ra in registered:
+        cap_map[ra.agent_id] = ", ".join(c.value for c in ra.capabilities)
+
     profiles = runtime.list_agents()
-    if not profiles:
+    if not profiles and not registered:
         print("No agents registered.")
         return 0
 
-    headers = ["Agent", "Trust", "Deployments", "Success Rate", "Rollbacks"]
+    headers = ["Agent", "Trust", "Deployments", "Success Rate", "Capabilities"]
     rows = []
     for p in profiles:
         rows.append([
@@ -251,8 +403,19 @@ def _handle_agents(runtime: CLIRuntime, args: argparse.Namespace) -> int:
             f"{p.trust_score:.4f}",
             str(p.total_deployments),
             f"{p.success_rate:.1%}",
-            str(p.rollbacks),
+            cap_map.get(p.agent_id, "-"),
         ])
+    # Show agents that are in the routing registry but have no trust profile yet.
+    seen = {p.agent_id for p in profiles}
+    for ra in registered:
+        if ra.agent_id not in seen:
+            rows.append([
+                ra.agent_id,
+                "-",
+                "0",
+                "-",
+                ", ".join(c.value for c in ra.capabilities),
+            ])
     print(format_table(headers, rows))
     return 0
 
@@ -322,9 +485,11 @@ def _handle_constraints(runtime: CLIRuntime, args: argparse.Namespace) -> int:
 
 _COMMAND_HANDLERS = {
     "goal": _handle_goal,
+    "project": _handle_project,
     "status": _handle_status,
     "approve": _handle_approve,
     "reject": _handle_reject,
+    "route": _handle_route,
     "agents": _handle_agents,
     "runs": _handle_runs,
     "queue": _handle_queue,

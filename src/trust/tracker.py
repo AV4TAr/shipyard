@@ -53,6 +53,7 @@ class TrustTracker:
         *,
         success: bool,
         risk_score: float,
+        domain: str | None = None,
     ) -> AgentProfile:
         """Record a deployment outcome and update the agent's profile.
 
@@ -84,16 +85,36 @@ class TrustTracker:
             / new_total
         )
 
-        updated = profile.model_copy(
-            update={
-                "total_deployments": new_total,
-                "successful_deployments": new_successful,
-                "rollbacks": new_rollbacks,
-                "avg_risk_score": round(new_avg_risk, 4),
-            }
-        )
+        update_dict: dict[str, object] = {
+            "total_deployments": new_total,
+            "successful_deployments": new_successful,
+            "rollbacks": new_rollbacks,
+            "avg_risk_score": round(new_avg_risk, 4),
+        }
+
+        # Update domain-specific score when a domain is provided.
+        if domain is not None:
+            domain_scores = dict(profile.domain_scores)
+            prev = domain_scores.get(domain, 0.5)
+            # Exponential moving average: weight recent outcome more heavily.
+            outcome_val = 1.0 if success else 0.0
+            domain_scores[domain] = round(prev * 0.7 + outcome_val * 0.3, 4)
+            update_dict["domain_scores"] = domain_scores
+
+        updated = profile.model_copy(update=update_dict)
         self._save_profile(updated)
         return updated
+
+    def compute_domain_trust(self, agent_id: str, domain: str) -> float:
+        """Return the domain-specific trust score for *agent_id* and *domain*.
+
+        If the agent has no domain-specific history, falls back to the
+        overall trust score.
+        """
+        profile = self.get_profile(agent_id)
+        if domain in profile.domain_scores:
+            return profile.domain_scores[domain]
+        return profile.trust_score
 
     def compute_trust_score(self, agent_id: str) -> float:
         """Return the current trust score for *agent_id*.

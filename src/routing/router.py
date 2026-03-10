@@ -242,8 +242,11 @@ class TaskRouter:
         # --- Language match (weight 0.20) ---
         lang_score = 0.0
         if requirements.required_languages:
-            agent_langs = {l.lower() for l in agent.languages}
-            matched = sum(1 for l in requirements.required_languages if l.lower() in agent_langs)
+            agent_langs = {lang.lower() for lang in agent.languages}
+            matched = sum(
+                1 for rl in requirements.required_languages
+                if rl.lower() in agent_langs
+            )
             lang_score = matched / len(requirements.required_languages)
             if lang_score > 0:
                 reasons.append(
@@ -268,8 +271,18 @@ class TaskRouter:
         # --- Trust factor (weight 0.20) ---
         trust_score = 0.5
         if self._trust_tracker is not None:
-            trust_score = self._trust_tracker.compute_trust_score(agent.agent_id)
-            reasons.append(f"Trust score: {trust_score:.2f}")
+            # Prefer domain-specific trust when the task requires capabilities.
+            domain = None
+            if requirements.required_capabilities:
+                domain = requirements.required_capabilities[0].value
+            if domain:
+                trust_score = self._trust_tracker.compute_domain_trust(
+                    agent.agent_id, domain
+                )
+                reasons.append(f"Domain trust ({domain}): {trust_score:.2f}")
+            else:
+                trust_score = self._trust_tracker.compute_trust_score(agent.agent_id)
+                reasons.append(f"Trust score: {trust_score:.2f}")
 
         # --- Load factor (weight 0.10) ---
         load_score = 1.0

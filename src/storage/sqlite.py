@@ -9,6 +9,7 @@ from pathlib import Path
 from src.goals.models import AgentTask, Goal, GoalPriority, GoalStatus
 from src.intent.schema import IntentDeclaration
 from src.pipeline.models import PipelineRun
+from src.routing.models import AgentRegistration
 from src.trust.models import AgentProfile
 
 _SCHEMA = """
@@ -35,6 +36,10 @@ CREATE TABLE IF NOT EXISTS agent_profiles (
 );
 CREATE TABLE IF NOT EXISTS intents (
     id TEXT PRIMARY KEY,
+    data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_registrations (
+    agent_id TEXT PRIMARY KEY,
     data TEXT NOT NULL
 );
 """
@@ -211,3 +216,41 @@ class SqliteIntentRepository:
     def list_all(self) -> list[IntentDeclaration]:
         rows = self._conn.execute("SELECT data FROM intents").fetchall()
         return [IntentDeclaration.model_validate_json(r[0]) for r in rows]
+
+
+class SqliteAgentRegistrationRepository:
+    """SQLite-backed AgentRegistration repository."""
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+        self._conn = _connect(db_path)
+
+    def save(self, registration: AgentRegistration) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO agent_registrations (agent_id, data) "
+            "VALUES (?, ?)",
+            (registration.agent_id, registration.model_dump_json()),
+        )
+        self._conn.commit()
+
+    def get(self, agent_id: str) -> AgentRegistration | None:
+        row = self._conn.execute(
+            "SELECT data FROM agent_registrations WHERE agent_id = ?",
+            (agent_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return AgentRegistration.model_validate_json(row[0])
+
+    def list_all(self) -> list[AgentRegistration]:
+        rows = self._conn.execute(
+            "SELECT data FROM agent_registrations"
+        ).fetchall()
+        return [AgentRegistration.model_validate_json(r[0]) for r in rows]
+
+    def delete(self, agent_id: str) -> None:
+        self._conn.execute(
+            "DELETE FROM agent_registrations WHERE agent_id = ?",
+            (agent_id,),
+        )
+        self._conn.commit()

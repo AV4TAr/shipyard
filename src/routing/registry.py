@@ -1,8 +1,13 @@
-"""AgentRegistry — in-memory store for agent registrations."""
+"""AgentRegistry — store for agent registrations with optional persistence."""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .models import AgentCapability, AgentRegistration, AgentStatus
+
+if TYPE_CHECKING:
+    from src.storage.repositories import AgentRegistrationRepository
 
 
 # Built-in generic fallback agent that cannot be unregistered.
@@ -22,15 +27,26 @@ _GENERIC_AGENT = AgentRegistration(
 
 
 class AgentRegistry:
-    """In-memory registry of available agents.
+    """Registry of available agents with optional persistence.
 
     Always contains a built-in GENERIC fallback agent that cannot be removed.
+    When *registration_repo* is provided, registrations are persisted through
+    that repository.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        registration_repo: AgentRegistrationRepository | None = None,
+    ) -> None:
+        self._repo = registration_repo
         self._agents: dict[str, AgentRegistration] = {
             _GENERIC_AGENT.agent_id: _GENERIC_AGENT.model_copy(),
         }
+        # Load persisted registrations on startup.
+        if self._repo is not None:
+            for reg in self._repo.list_all():
+                self._agents[reg.agent_id] = reg
 
     # ------------------------------------------------------------------
     # Public API
@@ -39,6 +55,8 @@ class AgentRegistry:
     def register(self, registration: AgentRegistration) -> None:
         """Register or update an agent."""
         self._agents[registration.agent_id] = registration
+        if self._repo is not None:
+            self._repo.save(registration)
 
     def unregister(self, agent_id: str) -> None:
         """Remove an agent from the registry.
@@ -54,6 +72,8 @@ class AgentRegistry:
         if agent_id not in self._agents:
             raise KeyError(f"Agent {agent_id!r} not found")
         del self._agents[agent_id]
+        if self._repo is not None:
+            self._repo.delete(agent_id)
 
     def update_status(self, agent_id: str, status: AgentStatus) -> None:
         """Update an agent's operational status.

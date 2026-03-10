@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from src.goals.models import AgentTask, TaskStatus
 from src.intent.schema import IntentDeclaration
 
-from .models import RouteDecision, RoutingStrategy
+from .models import RouteDecision
 from .router import TaskRouter
 
 
@@ -17,10 +18,45 @@ class RoutingBridge:
 
     Parameters:
         router: The task router to use for agent selection.
+        event_dispatcher: Optional dispatcher for routing event notifications.
     """
 
-    def __init__(self, router: TaskRouter) -> None:
+    def __init__(
+        self,
+        router: TaskRouter,
+        event_dispatcher: Any | None = None,
+    ) -> None:
         self._router = router
+        self._event_dispatcher = event_dispatcher
+        self._decisions: list[RouteDecision] = []
+
+    @property
+    def decisions(self) -> list[RouteDecision]:
+        """Read-only access to all routing decisions made."""
+        return list(self._decisions)
+
+    def _fire_event(self, decision: RouteDecision) -> None:
+        """Fire a routing event notification if a dispatcher is configured."""
+        if self._event_dispatcher is None:
+            return
+        from src.notifications.models import Event, EventType
+
+        event_type = (
+            EventType.ROUTING_FALLBACK
+            if decision.fallback_used
+            else EventType.TASK_ROUTED
+        )
+        event = Event(
+            event_type=event_type,
+            timestamp=datetime.now(timezone.utc),
+            data={
+                "task_id": decision.task_id,
+                "agent_id": decision.selected_agent_id,
+                "match_score": decision.match_score,
+                "fallback_used": decision.fallback_used,
+            },
+        )
+        self._event_dispatcher.dispatch(event)
 
     def route_and_assign(
         self,
@@ -41,6 +77,8 @@ class RoutingBridge:
             The routing decision.
         """
         decision = self._router.route(task)
+        self._decisions.append(decision)
+        self._fire_event(decision)
 
         if decision.selected_agent_id is not None:
             # Build an intent declaration from the task.

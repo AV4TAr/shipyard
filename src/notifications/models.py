@@ -24,6 +24,8 @@ class EventType(str, Enum):
     AGENT_REGISTERED = "agent.registered"
     DEPLOY_STARTED = "deploy.started"
     DEPLOY_COMPLETED = "deploy.completed"
+    TASK_ROUTED = "task.routed"
+    ROUTING_FALLBACK = "routing.fallback"
     ANOMALY_DETECTED = "anomaly.detected"
 
 

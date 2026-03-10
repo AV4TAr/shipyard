@@ -44,6 +44,7 @@ class AgentProfile(BaseModel):
     successful_deployments: int = 0
     rollbacks: int = 0
     avg_risk_score: float = 0.0
+    domain_scores: dict[str, float] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @computed_field  # type: ignore[prop-decorator]

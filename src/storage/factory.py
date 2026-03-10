@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from src.storage.repositories import (
     AgentProfileRepository,
+    AgentRegistrationRepository,
     GoalRepository,
     IntentRepository,
     PipelineRunRepository,
@@ -22,6 +23,7 @@ class StorageBackend:
     pipeline_runs: PipelineRunRepository
     agent_profiles: AgentProfileRepository
     intents: IntentRepository
+    agent_registrations: AgentRegistrationRepository | None = None
 
 
 def create_storage(
@@ -43,6 +45,7 @@ def create_storage(
     if backend == "memory":
         from src.storage.memory import (
             MemoryAgentProfileRepository,
+            MemoryAgentRegistrationRepository,
             MemoryGoalRepository,
             MemoryIntentRepository,
             MemoryPipelineRunRepository,
@@ -55,11 +58,13 @@ def create_storage(
             pipeline_runs=MemoryPipelineRunRepository(),
             agent_profiles=MemoryAgentProfileRepository(),
             intents=MemoryIntentRepository(),
+            agent_registrations=MemoryAgentRegistrationRepository(),
         )
 
     if backend == "sqlite":
         from src.storage.sqlite import (
             SqliteAgentProfileRepository,
+            SqliteAgentRegistrationRepository,
             SqliteGoalRepository,
             SqliteIntentRepository,
             SqlitePipelineRunRepository,
@@ -73,6 +78,7 @@ def create_storage(
             pipeline_runs=SqlitePipelineRunRepository(path),
             agent_profiles=SqliteAgentProfileRepository(path),
             intents=SqliteIntentRepository(path),
+            agent_registrations=SqliteAgentRegistrationRepository(path),
         )
 
     raise ValueError(f"Unknown storage backend: {backend!r}. Use 'memory' or 'sqlite'.")
