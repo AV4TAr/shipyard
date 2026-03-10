@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
-from typing import TYPE_CHECKING, Optional
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Optional
 
 from .decomposer import GoalDecomposer
 from .models import (
@@ -18,6 +20,8 @@ from .models import (
 
 if TYPE_CHECKING:
     from src.storage.repositories import GoalRepository, TaskRepository
+
+logger = logging.getLogger(__name__)
 
 
 class GoalManager:
@@ -34,10 +38,12 @@ class GoalManager:
         *,
         goal_repo: GoalRepository | None = None,
         task_repo: TaskRepository | None = None,
+        event_dispatcher: Any | None = None,
     ) -> None:
         self._decomposer = decomposer or GoalDecomposer()
         self._goal_repo = goal_repo
         self._task_repo = task_repo
+        self._event_dispatcher = event_dispatcher
         # Internal dicts as fallback when no repos are provided
         self._goals: dict[uuid.UUID, Goal] = {}
         self._breakdowns: dict[uuid.UUID, TaskBreakdown] = {}
@@ -111,6 +117,12 @@ class GoalManager:
             status=GoalStatus.DRAFT,
         )
         self._save_goal(goal)
+        self._dispatch("goal.created", {
+            "goal_id": str(goal.goal_id),
+            "title": goal.title,
+            "priority": goal.priority.value,
+            "created_by": created_by,
+        })
         return goal
 
     def get(self, goal_id: uuid.UUID) -> Goal:
@@ -186,6 +198,12 @@ class GoalManager:
         for task in breakdown.tasks:
             self._save_task(task)
 
+        self._dispatch("goal.activated", {
+            "goal_id": str(goal_id),
+            "title": goal.title,
+            "task_count": len(breakdown.tasks),
+        })
+
         return breakdown
 
     # ------------------------------------------------------------------
@@ -251,5 +269,29 @@ class GoalManager:
                 if goal.status != GoalStatus.CANCELLED:
                     goal.status = GoalStatus.COMPLETED
                     self._save_goal(goal)
+                    self._dispatch("goal.completed", {
+                        "goal_id": str(goal_id),
+                        "title": goal.title,
+                    })
             except KeyError:
                 pass
+
+    # ------------------------------------------------------------------
+    # Event dispatch helper
+    # ------------------------------------------------------------------
+
+    def _dispatch(self, event_type: str, data: dict[str, Any]) -> None:
+        """Fire a notification event if a dispatcher is configured."""
+        if self._event_dispatcher is None:
+            return
+        try:
+            from src.notifications.models import Event, EventType
+
+            event = Event(
+                event_type=EventType(event_type),
+                timestamp=datetime.now(timezone.utc),
+                data=data,
+            )
+            self._event_dispatcher.dispatch(event)
+        except Exception:
+            logger.debug("Failed to dispatch event %s", event_type, exc_info=True)

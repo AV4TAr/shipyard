@@ -51,6 +51,7 @@ class CLIRuntime:
         claim_manager: ClaimManager,
         deploy_queue: DeployQueue,
         intent_registry: IntentRegistry,
+        event_dispatcher: Any | None = None,
     ) -> None:
         self.goal_manager = goal_manager
         self.orchestrator = orchestrator
@@ -58,6 +59,7 @@ class CLIRuntime:
         self.claim_manager = claim_manager
         self.deploy_queue = deploy_queue
         self.intent_registry = intent_registry
+        self.event_dispatcher = event_dispatcher
 
     # ------------------------------------------------------------------
     # Factory methods
@@ -73,13 +75,10 @@ class CLIRuntime:
         """Create a runtime with default components and optional persistence.
 
         When ``storage_backend="sqlite"``, data is persisted to disk via
-        SQLite.  The default ``"memory"`` backend keeps everything in-memory
-        as before.
+        SQLite.  The default ``"memory"`` backend keeps everything in-memory.
 
         The environment variable ``AI_CICD_DB_PATH`` can also be used to
         enable SQLite persistence without passing arguments explicitly.
-
-        Useful for local development, demos, and tests.
         """
         # Allow env-var to override the storage backend
         env_db_path = os.environ.get("AI_CICD_DB_PATH")
@@ -87,9 +86,11 @@ class CLIRuntime:
             storage_backend = "sqlite"
             db_path = db_path or env_db_path
 
+        from src.notifications.dispatcher import EventDispatcher
         from src.storage.factory import create_storage
 
         storage = create_storage(backend=storage_backend, db_path=db_path)
+        event_dispatcher = EventDispatcher()
 
         intent_registry = IntentRegistry(intent_repo=storage.intents)
 
@@ -115,12 +116,23 @@ class CLIRuntime:
             claim_manager=claim_manager,
             deploy_queue=deploy_queue,
             run_repo=storage.pipeline_runs,
+            event_dispatcher=event_dispatcher,
         )
 
+        decomposer: GoalDecomposer | Any = GoalDecomposer()
+        if os.environ.get("OPENROUTER_API_KEY"):
+            try:
+                from src.llm.decomposer import LLMGoalDecomposer
+
+                decomposer = LLMGoalDecomposer()
+            except Exception:
+                pass  # Fall back to rule-based
+
         goal_manager = GoalManager(
-            decomposer=GoalDecomposer(),
+            decomposer=decomposer,
             goal_repo=storage.goals,
             task_repo=storage.tasks,
+            event_dispatcher=event_dispatcher,
         )
 
         return cls(
@@ -130,6 +142,7 @@ class CLIRuntime:
             claim_manager=claim_manager,
             deploy_queue=deploy_queue,
             intent_registry=intent_registry,
+            event_dispatcher=event_dispatcher,
         )
 
     @classmethod

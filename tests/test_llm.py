@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.goals.manager import GoalManager
 from src.goals.models import Goal, GoalPriority, TaskBreakdown
 from src.intent.schema import IntentDeclaration
 from src.llm.alignment import AlignmentResult, LLMAlignmentChecker
@@ -418,3 +419,74 @@ class TestModelSerialization:
             compatible=True, confidence=0.9, explanation="OK"
         )
         assert analysis.conflicts == []
+
+
+# ---------------------------------------------------------------------------
+# CLIRuntime LLM decomposer wiring tests
+# ---------------------------------------------------------------------------
+
+class TestCLIRuntimeDecomposerWiring:
+    """Tests that CLIRuntime.from_defaults() wires the correct decomposer."""
+
+    def test_uses_llm_decomposer_when_api_key_set(self, monkeypatch):
+        monkeypatch.setenv("OPENROUTER_API_KEY", "test-key-for-wiring")
+        from src.cli.runtime import CLIRuntime
+
+        runtime = CLIRuntime.from_defaults()
+        assert isinstance(runtime.goal_manager._decomposer, LLMGoalDecomposer)
+
+    def test_falls_back_to_rule_based_when_no_api_key(self, monkeypatch):
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        from src.cli.runtime import CLIRuntime
+        from src.goals.decomposer import GoalDecomposer
+
+        runtime = CLIRuntime.from_defaults()
+        assert isinstance(runtime.goal_manager._decomposer, GoalDecomposer)
+        assert not isinstance(runtime.goal_manager._decomposer, LLMGoalDecomposer)
+
+    def test_llm_decomposer_works_with_goal_manager_activate(self):
+        """LLMGoalDecomposer integrates with GoalManager.activate() (mocked LLM)."""
+        llm_response = json.dumps({
+            "tasks": [
+                {
+                    "title": "Implement: feature X",
+                    "description": "Build feature X",
+                    "target_files": ["src/x.py"],
+                    "target_services": [],
+                    "constraints": [],
+                    "depends_on_indices": [],
+                    "estimated_risk": "medium",
+                },
+                {
+                    "title": "Test: feature X",
+                    "description": "Test feature X",
+                    "target_files": ["tests/test_x.py"],
+                    "target_services": [],
+                    "constraints": [],
+                    "depends_on_indices": [0],
+                    "estimated_risk": "low",
+                },
+            ]
+        })
+
+        mock_client = MagicMock()
+        mock_client.complete.return_value = llm_response
+
+        decomposer = LLMGoalDecomposer(client=mock_client)
+        manager = GoalManager(decomposer=decomposer)
+
+        from src.goals.models import GoalInput, GoalPriority
+
+        goal = manager.create(
+            GoalInput(
+                title="Feature X",
+                description="Build feature X end to end",
+                priority=GoalPriority.MEDIUM,
+            ),
+            created_by="test-user",
+        )
+
+        breakdown = manager.activate(goal.goal_id)
+        assert len(breakdown.tasks) == 2
+        assert breakdown.tasks[0].title == "Implement: feature X"
+        assert breakdown.tasks[1].depends_on == [breakdown.tasks[0].task_id]

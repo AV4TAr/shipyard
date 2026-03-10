@@ -49,6 +49,7 @@ class PipelineOrchestrator:
         deploy_queue: Priority queue for approved deployments.
         config: Pipeline configuration (timeouts, thresholds, etc.).
         run_repo: Optional repository for persisting pipeline runs.
+        event_dispatcher: Optional dispatcher for notification events.
     """
 
     def __init__(
@@ -63,6 +64,7 @@ class PipelineOrchestrator:
         deploy_queue: DeployQueue,
         config: PipelineConfig | None = None,
         run_repo: PipelineRunRepository | None = None,
+        event_dispatcher: Any | None = None,
     ) -> None:
         self.intent_registry = intent_registry
         self.sandbox_manager = sandbox_manager
@@ -73,6 +75,7 @@ class PipelineOrchestrator:
         self.deploy_queue = deploy_queue
         self.config = config or PipelineConfig()
         self._run_repo = run_repo
+        self._event_dispatcher = event_dispatcher
 
         self._runs: dict[uuid.UUID, PipelineRun] = {}
 
@@ -114,11 +117,17 @@ class PipelineOrchestrator:
             status=PipelineStatus.IN_PROGRESS,
         )
         self._save_run(pipeline_run)
+        self._dispatch("pipeline.started", {
+            "run_id": str(pipeline_run.run_id),
+            "agent_id": agent_id,
+            "intent_id": str(intent_declaration.intent_id),
+        })
 
         # Stage 1: Intent validation
         intent_result = self._run_intent_stage(intent_declaration, pipeline_run)
         pipeline_run.record_stage(intent_result)
         if intent_result.status == PipelineStatus.FAILED:
+            self._dispatch_failure(pipeline_run, "intent")
             self._save_run(pipeline_run)
             return pipeline_run
 
@@ -126,6 +135,7 @@ class PipelineOrchestrator:
         sandbox_result = self._run_sandbox_stage(intent_declaration, pipeline_run)
         pipeline_run.record_stage(sandbox_result)
         if sandbox_result.status == PipelineStatus.FAILED:
+            self._dispatch_failure(pipeline_run, "sandbox")
             self._save_run(pipeline_run)
             return pipeline_run
 
@@ -133,6 +143,7 @@ class PipelineOrchestrator:
         validation_result = self._run_validation_stage(intent_declaration, pipeline_run)
         pipeline_run.record_stage(validation_result)
         if validation_result.status == PipelineStatus.FAILED:
+            self._dispatch_failure(pipeline_run, "validation")
             self._save_run(pipeline_run)
             return pipeline_run
 
@@ -142,6 +153,7 @@ class PipelineOrchestrator:
         )
         pipeline_run.record_stage(routing_result)
         if routing_result.status == PipelineStatus.FAILED:
+            self._dispatch_failure(pipeline_run, "trust_routing")
             self._save_run(pipeline_run)
             return pipeline_run
 
@@ -149,11 +161,28 @@ class PipelineOrchestrator:
         deploy_result = self._run_deploy_stage(intent_declaration, agent_id, pipeline_run)
         pipeline_run.record_stage(deploy_result)
         if deploy_result.status == PipelineStatus.FAILED:
+            self._dispatch_failure(pipeline_run, "deploy")
             self._save_run(pipeline_run)
             return pipeline_run
 
-        pipeline_run.mark_completed(PipelineStatus.PASSED)
-        self._save_run(pipeline_run)
+        # Deploy stage may have set status to BLOCKED (human approval needed)
+        if pipeline_run.status == PipelineStatus.BLOCKED:
+            from datetime import datetime, timezone
+
+            pipeline_run.completed_at = datetime.now(timezone.utc)
+            self._save_run(pipeline_run)
+            self._dispatch("approval.needed", {
+                "run_id": str(pipeline_run.run_id),
+                "agent_id": agent_id,
+            })
+        else:
+            pipeline_run.mark_completed(PipelineStatus.PASSED)
+            self._save_run(pipeline_run)
+            self._dispatch("pipeline.passed", {
+                "run_id": str(pipeline_run.run_id),
+                "agent_id": agent_id,
+            })
+
         return pipeline_run
 
     def get_run(self, run_id: uuid.UUID) -> PipelineRun | None:
@@ -491,3 +520,33 @@ class PipelineOrchestrator:
                 output={},
                 error=f"Unexpected error in deploy stage: {exc}",
             )
+
+    # ------------------------------------------------------------------
+    # Event dispatch helpers
+    # ------------------------------------------------------------------
+
+    def _dispatch(self, event_type: str, data: dict[str, Any]) -> None:
+        """Fire a notification event if a dispatcher is configured."""
+        if self._event_dispatcher is None:
+            return
+        try:
+            from datetime import datetime, timezone
+
+            from src.notifications.models import Event, EventType
+
+            event = Event(
+                event_type=EventType(event_type),
+                timestamp=datetime.now(timezone.utc),
+                data=data,
+            )
+            self._event_dispatcher.dispatch(event)
+        except Exception:
+            logger.debug("Failed to dispatch event %s", event_type, exc_info=True)
+
+    def _dispatch_failure(self, run: PipelineRun, stage: str) -> None:
+        """Dispatch a pipeline.failed event."""
+        self._dispatch("pipeline.failed", {
+            "run_id": str(run.run_id),
+            "agent_id": run.agent_id,
+            "stage": stage,
+        })
