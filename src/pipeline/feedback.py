@@ -141,7 +141,7 @@ class FeedbackFormatter:
         if sandbox_result:
             test_results = sandbox_result.output.get("test_results", {})
             for failure in test_results.get("failures", []):
-                structured = failure.get("structured_error", {})
+                structured = failure.get("structured_error") or {}
                 fixes.append({
                     "source": "sandbox.test_failure",
                     "severity": "error",
@@ -193,7 +193,7 @@ class FeedbackFormatter:
         if sandbox_result:
             test_results = sandbox_result.output.get("test_results", {})
             for failure in test_results.get("failures", []):
-                structured = failure.get("structured_error", {})
+                structured = failure.get("structured_error") or {}
                 fp = structured.get("file")
                 ln = structured.get("line")
                 if fp and (fp, ln) not in seen:

@@ -236,6 +236,16 @@ def claim_task(task_id: uuid.UUID, agent_id: Optional[str] = None) -> TaskAssign
                 branch_name = wt_info["branch_name"]
                 task.worktree_path = worktree_path
                 task.branch_name = branch_name
+                # Persist worktree fields on the task
+                rt.goal_manager._save_task(task)
+                # Persist repo_local_path set by ensure_repo()
+                if project.repo_local_path and rt.project_manager is not None:
+                    try:
+                        pm = rt.project_manager
+                        if pm._project_repo:
+                            pm._project_repo.save(project)
+                    except Exception:
+                        pass
         except Exception:
             pass  # Worktree creation is best-effort
 
@@ -384,13 +394,24 @@ def submit_work(task_id: uuid.UUID, submission: WorkSubmission) -> FeedbackMessa
                 pass
 
     # Build an IntentDeclaration from the submission
+    # Include worktree metadata so the pipeline can run real tests
+    intent_metadata = {"task_id": str(task_id), "diff": diff}
+    task_obj_for_meta = _find_task(rt, task_id)
+    if task_obj_for_meta:
+        if task_obj_for_meta.worktree_path:
+            intent_metadata["worktree_path"] = task_obj_for_meta.worktree_path
+        if task_obj_for_meta.branch_name:
+            intent_metadata["branch_name"] = task_obj_for_meta.branch_name
+    if submission.test_command:
+        intent_metadata["test_command"] = submission.test_command
+
     intent = IntentDeclaration(
         agent_id=submission.agent_id,
         intent_id=submission.intent_id,
         description=submission.description,
         rationale=f"Submitted work for task {task_id}: {submission.description}",
         target_files=files_changed,
-        metadata={"task_id": str(task_id), "diff": diff},
+        metadata=intent_metadata,
     )
 
     # Run the pipeline (may use real tests in worktree)
@@ -416,6 +437,52 @@ def submit_work(task_id: uuid.UUID, submission: WorkSubmission) -> FeedbackMessa
                 rt.lease_manager.release(task_id, submission.agent_id)
             except Exception:
                 pass
+        # Auto-merge worktree changes for auto-accepted runs
+        task_obj_merge = _find_task(rt, task_id)
+        if (
+            task_obj_merge
+            and task_obj_merge.worktree_path
+            and task_obj_merge.branch_name
+            and rt.worktree_manager is not None
+        ):
+            import logging as _logging
+            _merge_logger = _logging.getLogger(__name__)
+            try:
+                # Commit any uncommitted changes
+                rt.worktree_manager.commit(
+                    task_obj_merge.worktree_path,
+                    f"Task {str(task_id)[:8]}: {submission.description}",
+                )
+            except Exception:
+                _merge_logger.debug("Commit failed (may already be committed)")
+            try:
+                project = _find_project_for_task(rt, task_obj_merge)
+                if project:
+                    repo_dir = (
+                        project.repo_local_path
+                        or str(
+                            rt.worktree_manager.repos_dir
+                            / str(project.project_id)
+                        )
+                    )
+                    # Clean up worktree before merge (git requires this)
+                    rt.worktree_manager.cleanup(
+                        task_obj_merge.worktree_path, repo_dir
+                    )
+                    # Merge the branch into main
+                    merged = rt.worktree_manager.merge(project, task_obj_merge)
+                    pipeline_run.metadata["merged"] = merged
+                    if merged:
+                        _merge_logger.info(
+                            "Auto-merged branch %s for task %s",
+                            task_obj_merge.branch_name,
+                            task_id,
+                        )
+                    rt.orchestrator._save_run(pipeline_run)
+            except Exception:
+                _merge_logger.exception(
+                    "Auto-merge failed for task %s", task_id
+                )
     elif pipeline_run.status.value == "blocked":
         status = "needs_revision"
         message = "Work pending human approval."

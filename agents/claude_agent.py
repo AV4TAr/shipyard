@@ -228,12 +228,37 @@ def ask_claude(llm_client, model, agent_name, task, system_prompt, workspace):
     else:
         workspace_info = "\nYou are working in diff-only mode (no workspace)."
 
+    # Fetch system-level constraints from the server
+    system_constraints = ""
+    try:
+        import requests as _req
+        resp = _req.get(f"{SHIPYARD_URL}/api/config/constraints", timeout=5)
+        if resp.status_code == 200:
+            cdata = resp.json()
+            rules = cdata.get("constraints", [])
+            if rules:
+                lines = []
+                for r in rules:
+                    sev = r.get("severity", "SHOULD")
+                    desc = r.get("description", r.get("rule", ""))
+                    lines.append(f"  [{sev}] {desc}")
+                system_constraints = (
+                    "\n\nSYSTEM CONSTRAINTS (from the pipeline):\n"
+                    + "\n".join(lines)
+                )
+    except Exception:
+        pass
+
+    task_constraints = task.get("constraints", [])
+    constraints_text = ", ".join(task_constraints) if task_constraints else "None"
+
     user_prompt = f"""Task to complete:
 - Title: {task.get('title', 'Unknown')}
 - Description: {task.get('description', 'No description')}
-- Constraints: {', '.join(task.get('constraints', [])) or 'None'}
+- Constraints: {constraints_text}
 - Target files: {', '.join(task.get('target_files', [])) or 'Agent decides'}
 - Acceptance criteria: {', '.join(task.get('acceptance_criteria', [])) or 'None specified'}
+{system_constraints}
 {workspace_info}
 
 Respond with ONLY valid JSON (no markdown fences, no explanation) in this format:
@@ -312,9 +337,49 @@ def process_task(sdk_client, llm_client, model, agent_name, task_assignment, sys
             workspace.write(filepath, content)
             log(agent_name, f"  Wrote: {filepath}")
 
+        # Install dependencies
+        if workspace.exists("requirements.txt"):
+            log(agent_name, "  Installing dependencies (requirements.txt)...")
+            pip_result = workspace.run(
+                "python3 -m pip install -r requirements.txt -q"
+            )
+            if not pip_result.success:
+                log(agent_name, f"  pip install failed: {pip_result.stderr[-200:]}")
+        elif workspace.exists("pyproject.toml"):
+            log(agent_name, "  Installing dependencies (pyproject.toml)...")
+            pip_result = workspace.run("python3 -m pip install -e . -q")
+            if not pip_result.success:
+                # Try just installing core deps
+                log(agent_name, "  editable install failed, trying core deps...")
+                workspace.run(
+                    "python3 -m pip install fastapi uvicorn httpx pytest -q"
+                )
+
+        # Run ruff auto-fix before testing/submitting
+        log(agent_name, "  Running ruff auto-fix...")
+        ruff_fix = workspace.run("ruff check --fix .")
+        ruff_format = workspace.run("ruff format .")
+        # Check remaining issues
+        ruff_check = workspace.run("ruff check --output-format=text .")
+        if ruff_check.returncode == 0:
+            log(agent_name, "  Ruff: clean")
+        else:
+            remaining = len([
+                l for l in ruff_check.stdout.splitlines()
+                if l.strip() and not l.startswith("Found")
+            ])
+            log(agent_name, f"  Ruff: {remaining} issues remaining after auto-fix")
+
         # Run tests locally first to give quick feedback
         sdk_client.set_phase("running_tests")
-        test_result = workspace.run_tests("python3 -m pytest -x -q")
+        # Set PYTHONPATH for src/ layout projects
+        test_env = {}
+        if workspace.exists("src"):
+            test_env["PYTHONPATH"] = str(workspace.path / "src")
+        test_result = workspace.run(
+            "python3 -m pytest -p no:asyncio -x -q",
+            env=test_env,
+        )
         if test_result.success:
             log(agent_name, "  Local tests: PASSED")
         else:

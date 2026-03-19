@@ -250,7 +250,7 @@ class WorktreeManager:
     def run_tests(
         self,
         worktree_path: str,
-        test_command: str = "pytest",
+        test_command: str = "python3 -m pytest -p no:asyncio",
         timeout: int = 120,
     ) -> dict[str, Any]:
         """Run tests in a worktree directory.
@@ -267,12 +267,23 @@ class WorktreeManager:
             }
 
         try:
+            # Auto-detect src/ layout and set PYTHONPATH
+            import os
+            env = os.environ.copy()
+            src_dir = wt / "src"
+            if src_dir.is_dir():
+                existing = env.get("PYTHONPATH", "")
+                env["PYTHONPATH"] = str(src_dir) + (
+                    os.pathsep + existing if existing else ""
+                )
+
             result = subprocess.run(
                 test_command.split(),
                 cwd=wt,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
+                env=env,
             )
             return {
                 "returncode": result.returncode,

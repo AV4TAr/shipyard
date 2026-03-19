@@ -80,12 +80,12 @@ class TestWorkspaceRun:
 
     def test_run_tests_passing(self, ws):
         ws.write("test_ok.py", "def test_ok(): assert True\n")
-        result = ws.run_tests("python3 -m pytest test_ok.py -x")
+        result = ws.run_tests("python3 -m pytest -p no:asyncio test_ok.py -x")
         assert result.success
 
     def test_run_tests_failing(self, ws):
         ws.write("test_bad.py", "def test_bad(): assert False\n")
-        result = ws.run_tests("python3 -m pytest test_bad.py -x")
+        result = ws.run_tests("python3 -m pytest -p no:asyncio test_bad.py -x")
         assert not result.success
 
     def test_run_repr(self, ws):

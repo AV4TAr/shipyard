@@ -305,7 +305,7 @@ class TestRunTests:
             "def test_pass(): assert True\n"
         )
 
-        test_result = wt_manager.run_tests(wt_path, "python3 -m pytest test_trivial.py -x")
+        test_result = wt_manager.run_tests(wt_path, "python3 -m pytest -p no:asyncio test_trivial.py -x")
         assert test_result["passed"] is True
         assert test_result["returncode"] == 0
 
@@ -320,7 +320,7 @@ class TestRunTests:
             "def test_fail(): assert False\n"
         )
 
-        test_result = wt_manager.run_tests(wt_path, "python3 -m pytest test_fail.py -x")
+        test_result = wt_manager.run_tests(wt_path, "python3 -m pytest -p no:asyncio test_fail.py -x")
         assert test_result["passed"] is False
         assert test_result["returncode"] != 0
 
@@ -341,7 +341,7 @@ class TestRunTests:
         )
 
         result = wt_manager.run_tests(
-            wt_path, "python3 -m pytest test_slow.py -x", timeout=1
+            wt_path, "python3 -m pytest -p no:asyncio test_slow.py -x", timeout=1
         )
         assert result["passed"] is False
         assert "timed out" in result["stderr"].lower()

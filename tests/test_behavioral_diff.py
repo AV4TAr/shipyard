@@ -547,7 +547,7 @@ class TestBehavioralDiffIntegration:
         """End-to-end test with real git repo detecting a fix + new test."""
         runner = RealBehavioralDiffRunner(
             worktree_manager=git_setup["worktree_manager"],
-            test_command="python3 -m pytest -v --tb=no",
+            test_command="python3 -m pytest -p no:asyncio -v --tb=no",
         )
         sandbox = {"worktree_path": git_setup["worktree_path"]}
         result = runner.run("intent-integration", sandbox)

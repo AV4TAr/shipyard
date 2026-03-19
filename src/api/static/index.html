@@ -921,7 +921,8 @@ main {
 }
 .config-hint {
   font-size: 0.72rem;
-  color: var(--text-muted, #6b7280);
+  color: var(--text-secondary);
+  opacity: 0.8;
   line-height: 1.35;
   margin-top: -0.1rem;
 }
@@ -2773,7 +2774,7 @@ async function renderConstraints() {
     body.innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>Name</th><th>Category</th><th>Severity</th><th>Description</th>
+          <th>Name</th><th>Category</th><th>Severity</th><th>Rule</th>
         </tr></thead>
         <tbody>
           ${constraints.map(c => `
@@ -2781,7 +2782,10 @@ async function renderConstraints() {
               <td><strong>${escapeHtml(c.name || c.constraint_id || '---')}</strong></td>
               <td><span class="badge badge-blue">${escapeHtml(c.category || '---')}</span></td>
               <td>${severityBadge(c.severity)}</td>
-              <td style="color:var(--text-secondary);max-width:400px">${escapeHtml(c.description || '---')}</td>
+              <td>
+                <div style="font-weight:500;color:var(--text-primary)">${escapeHtml(c.rule || '---')}</div>
+                ${c.rationale ? '<div class="config-hint" style="margin-top:0.25rem">' + escapeHtml(c.rationale.trim()) + '</div>' : ''}
+              </td>
             </tr>
           `).join('')}
         </tbody>
@@ -2915,10 +2919,12 @@ function cfgTextInput(section, key, value, label, opts = {}) {
   `;
 }
 
-function cfgSelect(section, key, value, label, options) {
+function cfgSelect(section, key, value, label, options, opts = {}) {
+  const hint = opts.hint ? `<div class="config-hint">${escapeHtml(opts.hint)}</div>` : '';
   return `
     <div class="config-field">
       <label class="config-label">${escapeHtml(label)}</label>
+      ${hint}
       <select class="config-input" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}">
         ${options.map(o => `<option value="${escapeHtml(o)}" ${o === value ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
       </select>
@@ -2928,88 +2934,94 @@ function cfgSelect(section, key, value, label, options) {
 
 function renderPipelineSection(p) {
   return cfgSectionCard('Pipeline', 'pipeline', `
-    ${cfgNumberInput('pipeline', 'max_sandbox_iterations', p.max_sandbox_iterations || 5, 'Max Sandbox Iterations', {min: 1, max: 50})}
-    ${cfgNumberInput('pipeline', 'sandbox_timeout', p.sandbox_timeout || 300, 'Sandbox Timeout (s)', {min: 1, max: 3600})}
-    ${cfgToggle('pipeline', 'auto_rollback_enabled', p.auto_rollback_enabled !== false, 'Auto Rollback')}
+    ${cfgNumberInput('pipeline', 'max_sandbox_iterations', p.max_sandbox_iterations || 5, 'Max Sandbox Iterations', {min: 1, max: 50, hint: 'How many test-fix cycles an agent gets before failing. Higher = more retries, slower feedback.'})}
+    ${cfgNumberInput('pipeline', 'sandbox_timeout', p.sandbox_timeout || 300, 'Sandbox Timeout (s)', {min: 1, max: 3600, hint: 'Max seconds for sandbox execution. Too low may kill complex tasks; too high wastes resources on stuck agents.'})}
+    ${cfgToggle('pipeline', 'auto_rollback_enabled', p.auto_rollback_enabled !== false, 'Auto Rollback', {hint: 'When ON, deploys that trigger anomaly detection are automatically reverted. Turn OFF for manual rollback only.'})}
   `);
 }
 
 function renderThresholdsSection(t) {
   return cfgSectionCard('Risk Thresholds', 'risk_thresholds', `
-    ${cfgSlider('risk_thresholds', 'critical', t.critical || 0.85, 'Critical')}
-    ${cfgSlider('risk_thresholds', 'high', t.high || 0.60, 'High')}
-    ${cfgSlider('risk_thresholds', 'medium', t.medium || 0.35, 'Medium')}
-    ${cfgSlider('risk_thresholds', 'low', t.low || 0, 'Low')}
+    <div style="grid-column:1/-1;margin-bottom:0.25rem" class="config-hint">Changes with a risk score above a threshold are classified at that level. This controls which deploy route they take.</div>
+    ${cfgSlider('risk_thresholds', 'critical', t.critical || 0.85, 'Critical', {hint: 'Requires human approval + canary deploy. Lower this to be more cautious.'})}
+    ${cfgSlider('risk_thresholds', 'high', t.high || 0.60, 'High', {hint: 'Requires human approval. Lower this to flag more changes for human review.'})}
+    ${cfgSlider('risk_thresholds', 'medium', t.medium || 0.35, 'Medium', {hint: 'Goes through agent review. Lower this to send fewer changes to auto-deploy.'})}
+    ${cfgSlider('risk_thresholds', 'low', t.low || 0, 'Low', {hint: 'Auto-deployed with no review. Raise this to require review for near-trivial changes.'})}
   `);
 }
 
 function renderSignalWeightsSection(sw) {
   return cfgSectionCard('Signal Weights', 'signal_weights', `
-    ${cfgSlider('signal_weights', 'static_analysis', sw.static_analysis || 1.0, 'Static Analysis', {min: 0.1, max: 10, step: 0.1})}
-    ${cfgSlider('signal_weights', 'behavioral_diff', sw.behavioral_diff || 1.5, 'Behavioral Diff', {min: 0.1, max: 10, step: 0.1})}
-    ${cfgSlider('signal_weights', 'intent_alignment', sw.intent_alignment || 1.2, 'Intent Alignment', {min: 0.1, max: 10, step: 0.1})}
-    ${cfgSlider('signal_weights', 'resource_bounds', sw.resource_bounds || 1.0, 'Resource Bounds', {min: 0.1, max: 10, step: 0.1})}
-    ${cfgSlider('signal_weights', 'security_scan', sw.security_scan || 2.0, 'Security Scan', {min: 0.1, max: 10, step: 0.1})}
+    <div style="grid-column:1/-1;margin-bottom:0.25rem" class="config-hint">These weights control how much each validation signal influences the final risk score. Higher weight = more influence on whether a change passes or fails.</div>
+    ${cfgSlider('signal_weights', 'static_analysis', sw.static_analysis || 1.0, 'Static Analysis', {min: 0.1, max: 10, step: 0.1, hint: 'Linting via ruff. Increase to fail more aggressively on code style / lint issues.'})}
+    ${cfgSlider('signal_weights', 'behavioral_diff', sw.behavioral_diff || 1.5, 'Behavioral Diff', {min: 0.1, max: 10, step: 0.1, hint: 'Test output comparison before/after. High weight catches regressions; low weight tolerates test flakiness.'})}
+    ${cfgSlider('signal_weights', 'intent_alignment', sw.intent_alignment || 1.2, 'Intent Alignment', {min: 0.1, max: 10, step: 0.1, hint: 'LLM check that code matches declared intent. Increase to penalize agents that drift from their stated plan.'})}
+    ${cfgSlider('signal_weights', 'resource_bounds', sw.resource_bounds || 1.0, 'Resource Bounds', {min: 0.1, max: 10, step: 0.1, hint: 'File size and resource checks. Increase to block agents adding large files or bloated output.'})}
+    ${cfgSlider('signal_weights', 'security_scan', sw.security_scan || 2.0, 'Security Scan', {min: 0.1, max: 10, step: 0.1, hint: 'Bandit security scanning. Already 2x by default. Reduce only if security false positives are blocking too many deploys.'})}
   `);
 }
 
 function renderRiskFactorWeightsSection(rfw) {
   return cfgSectionCard('Risk Factor Weights', 'risk_factor_weights', `
-    ${cfgSlider('risk_factor_weights', 'file_sensitivity', rfw.file_sensitivity || 0.25, 'File Sensitivity')}
-    ${cfgSlider('risk_factor_weights', 'blast_radius', rfw.blast_radius || 0.20, 'Blast Radius')}
-    ${cfgSlider('risk_factor_weights', 'agent_trust', rfw.agent_trust || 0.20, 'Agent Trust')}
-    ${cfgSlider('risk_factor_weights', 'validation_confidence', rfw.validation_confidence || 0.20, 'Validation Confidence')}
-    ${cfgSlider('risk_factor_weights', 'time_of_day', rfw.time_of_day || 0.15, 'Time of Day')}
+    <div style="grid-column:1/-1;margin-bottom:0.25rem" class="config-hint">These weights determine how the overall risk score is computed. They should sum to 1.0 for balanced scoring.</div>
+    ${cfgSlider('risk_factor_weights', 'file_sensitivity', rfw.file_sensitivity || 0.25, 'File Sensitivity', {hint: 'How much touching sensitive files (auth, config, infra) raises risk. Increase to be stricter about critical paths.'})}
+    ${cfgSlider('risk_factor_weights', 'blast_radius', rfw.blast_radius || 0.20, 'Blast Radius', {hint: 'How much the number of files/lines changed raises risk. Increase to penalize large changes more.'})}
+    ${cfgSlider('risk_factor_weights', 'agent_trust', rfw.agent_trust || 0.20, 'Agent Trust', {hint: 'How much agent reputation lowers risk. Increase to give trusted agents more freedom; decrease to treat all agents equally.'})}
+    ${cfgSlider('risk_factor_weights', 'validation_confidence', rfw.validation_confidence || 0.20, 'Validation Confidence', {hint: 'How much passing validation signals lower risk. Increase to reward clean validation results more.'})}
+    ${cfgSlider('risk_factor_weights', 'time_of_day', rfw.time_of_day || 0.15, 'Time of Day', {hint: 'Risk bump for deploys outside business hours. Reduce to 0 if you deploy 24/7 and don\'t care about timing.'})}
   `);
 }
 
 function renderDeployRoutesSection(dr) {
   const routeOptions = ['auto_deploy', 'agent_review', 'human_approval', 'human_approval_canary'];
   return cfgSectionCard('Deploy Routes', 'deploy_routes', `
-    ${cfgSelect('deploy_routes', 'low', dr.low || 'auto_deploy', 'Low Risk', routeOptions)}
-    ${cfgSelect('deploy_routes', 'medium', dr.medium || 'agent_review', 'Medium Risk', routeOptions)}
-    ${cfgSelect('deploy_routes', 'high', dr.high || 'human_approval', 'High Risk', routeOptions)}
-    ${cfgSelect('deploy_routes', 'critical', dr.critical || 'human_approval_canary', 'Critical Risk', routeOptions)}
+    <div style="grid-column:1/-1;margin-bottom:0.25rem" class="config-hint">Maps each risk level to a deployment strategy. auto_deploy = no review, agent_review = another agent checks, human_approval = you decide, human_approval_canary = you decide + gradual rollout.</div>
+    ${cfgSelect('deploy_routes', 'low', dr.low || 'auto_deploy', 'Low Risk', routeOptions, {hint: 'Trivial changes (docs, formatting). Set to agent_review if you want a second pair of eyes on everything.'})}
+    ${cfgSelect('deploy_routes', 'medium', dr.medium || 'agent_review', 'Medium Risk', routeOptions, {hint: 'Standard feature work. Set to human_approval if you want to personally approve most code changes.'})}
+    ${cfgSelect('deploy_routes', 'high', dr.high || 'human_approval', 'High Risk', routeOptions, {hint: 'Risky changes (auth, infra, multi-service). Lowering this removes your safety net for dangerous deploys.'})}
+    ${cfgSelect('deploy_routes', 'critical', dr.critical || 'human_approval_canary', 'Critical Risk', routeOptions, {hint: 'Highest-risk changes. Canary deploys roll out gradually so you can catch issues before full release.'})}
   `);
 }
 
 function renderTrustSection(t) {
   const weights = t.weights || {};
   return cfgSectionCard('Trust', 'trust', `
-    ${cfgSlider('trust', 'baseline_trust', t.baseline_trust || 0.5, 'Baseline Trust')}
-    ${cfgNumberInput('trust', 'tenure_ramp_deployments', t.tenure_ramp_deployments || 100, 'Tenure Ramp Deployments', {min: 1, max: 1000})}
+    ${cfgSlider('trust', 'baseline_trust', t.baseline_trust || 0.5, 'Baseline Trust', {hint: 'Starting trust for new agents. Higher = new agents deploy with less scrutiny. Lower = new agents face tighter review until they prove themselves.'})}
+    ${cfgNumberInput('trust', 'tenure_ramp_deployments', t.tenure_ramp_deployments || 100, 'Tenure Ramp Deployments', {min: 1, max: 1000, hint: 'Deploys needed to earn full tenure bonus. Lower = agents earn trust faster. Higher = slower trust ramp.'})}
     <div style="grid-column:1/-1;margin-top:0.5rem"><strong style="color:var(--text-secondary);font-size:0.85rem">Trust Weights</strong></div>
-    ${cfgSlider('trust.weights', 'success_rate', weights.success_rate || 0.6, 'Success Rate')}
-    ${cfgSlider('trust.weights', 'rollback_penalty', weights.rollback_penalty || 0.3, 'Rollback Penalty')}
-    ${cfgSlider('trust.weights', 'tenure_bonus', weights.tenure_bonus || 0.1, 'Tenure Bonus')}
+    <div style="grid-column:1/-1;margin-bottom:0.25rem" class="config-hint">How the trust score is computed from agent history. Should sum to 1.0.</div>
+    ${cfgSlider('trust.weights', 'success_rate', weights.success_rate || 0.6, 'Success Rate', {hint: 'Weight of successful deploys in trust score. The primary trust signal.'})}
+    ${cfgSlider('trust.weights', 'rollback_penalty', weights.rollback_penalty || 0.3, 'Rollback Penalty', {hint: 'How much rollbacks hurt trust. Increase to punish agents more harshly for failed deploys.'})}
+    ${cfgSlider('trust.weights', 'tenure_bonus', weights.tenure_bonus || 0.1, 'Tenure Bonus', {hint: 'Bonus for long-running agents. Increase to reward longevity over raw success rate.'})}
   `);
 }
 
 function renderSandboxSection(s) {
   const limits = s.resource_limits || {};
   return cfgSectionCard('Sandbox', 'sandbox', `
-    ${cfgTextInput('sandbox', 'default_image', s.default_image || 'python:3.11-slim', 'Default Image')}
+    ${cfgTextInput('sandbox', 'default_image', s.default_image || 'python:3.11-slim', 'Default Image', {hint: 'Docker image for sandbox execution. Agents run code in this environment.'})}
     <div style="grid-column:1/-1;margin-top:0.5rem"><strong style="color:var(--text-secondary);font-size:0.85rem">Resource Limits</strong></div>
-    ${cfgNumberInput('sandbox.resource_limits', 'max_cpu', limits.max_cpu || 1.0, 'Max CPU', {min: 0.1, max: 16, step: 0.1})}
-    ${cfgNumberInput('sandbox.resource_limits', 'max_memory_mb', limits.max_memory_mb || 512, 'Max Memory (MB)', {min: 64, max: 16384})}
-    ${cfgNumberInput('sandbox.resource_limits', 'max_disk_mb', limits.max_disk_mb || 1024, 'Max Disk (MB)', {min: 64, max: 65536})}
+    <div style="grid-column:1/-1;margin-bottom:0.25rem" class="config-hint">Caps on what each sandbox container can consume. Prevents runaway agents from hogging resources.</div>
+    ${cfgNumberInput('sandbox.resource_limits', 'max_cpu', limits.max_cpu || 1.0, 'Max CPU', {min: 0.1, max: 16, step: 0.1, hint: 'CPU cores per sandbox. Increase for compute-heavy tasks (compilation, ML).'})}
+    ${cfgNumberInput('sandbox.resource_limits', 'max_memory_mb', limits.max_memory_mb || 512, 'Max Memory (MB)', {min: 64, max: 16384, hint: 'Memory cap per sandbox. Too low may OOM-kill agents mid-task.'})}
+    ${cfgNumberInput('sandbox.resource_limits', 'max_disk_mb', limits.max_disk_mb || 1024, 'Max Disk (MB)', {min: 64, max: 65536, hint: 'Disk space per sandbox. Increase if agents need to install large dependencies.'})}
   `);
 }
 
 function renderLeasesSection(l) {
   return cfgSectionCard('Leases', 'leases', `
-    ${cfgNumberInput('leases', 'duration', l.duration || 120, 'Duration (s)', {min: 10, max: 3600})}
-    ${cfgNumberInput('leases', 'heartbeat_interval', l.heartbeat_interval || 30, 'Heartbeat Interval (s)', {min: 5, max: 600})}
-    ${cfgNumberInput('leases', 'grace_period', l.grace_period || 15, 'Grace Period (s)', {min: 0, max: 300})}
-    ${cfgNumberInput('leases', 'sweep_interval', l.sweep_interval || 30, 'Sweep Interval (s)', {min: 5, max: 600})}
+    ${cfgNumberInput('leases', 'duration', l.duration || 120, 'Duration (s)', {min: 10, max: 3600, hint: 'How long a task claim lasts before expiring. Too short = agents lose claims mid-work. Too long = stuck tasks block others.'})}
+    ${cfgNumberInput('leases', 'heartbeat_interval', l.heartbeat_interval || 30, 'Heartbeat Interval (s)', {min: 5, max: 600, hint: 'How often agents should send heartbeats to keep their claim alive. Must be less than duration.'})}
+    ${cfgNumberInput('leases', 'grace_period', l.grace_period || 15, 'Grace Period (s)', {min: 0, max: 300, hint: 'Extra time after lease expires before the task is reclaimed. Covers brief network hiccups.'})}
+    ${cfgNumberInput('leases', 'sweep_interval', l.sweep_interval || 30, 'Sweep Interval (s)', {min: 5, max: 600, hint: 'How often the background job checks for expired leases. Lower = faster recovery from dead agents.'})}
   `);
 }
 
 function renderMonitoringSection(m) {
   return cfgSectionCard('Monitoring', 'monitoring', `
-    ${cfgSlider('monitoring', 'error_rate_threshold', m.error_rate_threshold || 0.05, 'Error Rate Threshold')}
-    ${cfgNumberInput('monitoring', 'latency_p99_threshold_ms', m.latency_p99_threshold_ms || 500, 'Latency P99 (ms)', {min: 10, max: 60000})}
-    ${cfgNumberInput('monitoring', 'rollback_cooldown_seconds', m.rollback_cooldown_seconds || 300, 'Rollback Cooldown (s)', {min: 0, max: 3600})}
+    ${cfgSlider('monitoring', 'error_rate_threshold', m.error_rate_threshold || 0.05, 'Error Rate Threshold', {hint: 'Error rate that triggers anomaly detection post-deploy. 0.05 = 5%. Lower = more sensitive, more rollbacks.'})}
+    ${cfgNumberInput('monitoring', 'latency_p99_threshold_ms', m.latency_p99_threshold_ms || 500, 'Latency P99 (ms)', {min: 10, max: 60000, hint: 'P99 latency that triggers an anomaly. Lower = stricter performance requirements.'})}
+    ${cfgNumberInput('monitoring', 'rollback_cooldown_seconds', m.rollback_cooldown_seconds || 300, 'Rollback Cooldown (s)', {min: 0, max: 3600, hint: 'Minimum wait between automatic rollbacks. Prevents rollback storms from flapping metrics.'})}
   `);
 }
 
@@ -3017,26 +3029,31 @@ function renderConstraintsEditorSection(cst) {
   const constraints = (cst && cst.constraints) || [];
   if (constraints.length === 0) return '';
   const severityOptions = ['must', 'should', 'prefer'];
+  const severityColor = s => ({must: 'var(--red, #ef4444)', should: 'var(--yellow, #f59e0b)', prefer: 'var(--blue, #3b82f6)'}[s] || 'var(--text-secondary)');
   const rows = constraints.map((c, i) => `
     <tr>
-      <td><code style="color:var(--blue)">${escapeHtml(c.constraint_id || '')}</code></td>
-      <td><span class="badge badge-blue">${escapeHtml(c.category || '')}</span></td>
-      <td>
+      <td style="vertical-align:top"><code style="color:var(--blue);white-space:nowrap">${escapeHtml(c.constraint_id || '')}</code></td>
+      <td style="vertical-align:top"><span class="badge badge-blue">${escapeHtml(c.category || '')}</span></td>
+      <td style="vertical-align:top">
         <select class="config-input config-input-sm" data-constraint-idx="${i}" data-cfield="severity">
           ${severityOptions.map(s => `<option value="${s}" ${s === (c.severity || '').toLowerCase() ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
         </select>
       </td>
-      <td><input type="text" class="config-input config-input-sm" data-constraint-idx="${i}" data-cfield="rule" value="${escapeHtml(c.rule || '')}" style="width:100%"></td>
+      <td>
+        <input type="text" class="config-input" data-constraint-idx="${i}" data-cfield="rule" value="${escapeHtml(c.rule || '')}" style="width:100%;font-weight:500;font-size:0.85rem">
+        ${c.rationale ? `<div class="config-hint" style="margin-top:0.3rem">${escapeHtml(c.rationale.trim())}</div>` : ''}
+      </td>
     </tr>
   `).join('');
 
   return `
     <div class="card" style="margin-bottom:1rem">
       <div class="card-body">
-        <h3 style="margin-bottom:1rem;color:var(--text-primary);font-size:1.1rem">Constraints</h3>
+        <h3 style="margin-bottom:0.5rem;color:var(--text-primary);font-size:1.1rem">Constraints</h3>
+        <div class="config-hint" style="margin-bottom:1rem">Rules agents must follow. MUST = blocks deploy, SHOULD = warning, PREFER = suggestion only.</div>
         <div style="overflow-x:auto">
           <table class="data-table" id="cfg-constraints-table">
-            <thead><tr><th>ID</th><th>Category</th><th>Severity</th><th>Rule</th></tr></thead>
+            <thead><tr><th style="width:140px">ID</th><th style="width:110px">Category</th><th style="width:100px">Severity</th><th>Rule</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
         </div>
