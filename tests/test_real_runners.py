@@ -78,8 +78,8 @@ class TestRealStaticAnalysisRunner:
 
         assert len(findings) == 4
 
-        # E501 -> ERROR (HIGH)
-        assert findings[0].severity == Severity.ERROR
+        # E501 -> WARNING (style, not blocking)
+        assert findings[0].severity == Severity.WARNING
         assert "E501" in findings[0].title
         assert findings[0].file_path == "src/foo.py"
         assert findings[0].line_number == 42
@@ -88,8 +88,8 @@ class TestRealStaticAnalysisRunner:
         assert findings[1].severity == Severity.WARNING
         assert findings[1].suggestion == "Remove trailing whitespace"
 
-        # F401 -> ERROR (HIGH)
-        assert findings[2].severity == Severity.ERROR
+        # F401 -> WARNING (unused import, not blocking)
+        assert findings[2].severity == Severity.WARNING
 
         # I001 -> INFO (LOW)
         assert findings[3].severity == Severity.INFO

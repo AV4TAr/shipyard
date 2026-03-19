@@ -12,8 +12,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Base directories for cloned repos and worktrees
-_DATA_DIR = Path("data")
+# Base directories for cloned repos and worktrees (absolute to avoid cwd issues)
+_DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 _REPOS_DIR = _DATA_DIR / "repos"
 _WORKTREES_DIR = _DATA_DIR / "worktrees"
 

@@ -919,6 +919,12 @@ main {
   color: var(--text-secondary);
   font-weight: 500;
 }
+.config-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted, #6b7280);
+  line-height: 1.35;
+  margin-top: -0.1rem;
+}
 .config-input {
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -2853,9 +2859,11 @@ function cfgNumberInput(section, key, value, label, opts = {}) {
   const min = opts.min !== undefined ? opts.min : '';
   const max = opts.max !== undefined ? opts.max : '';
   const step = opts.step || (opts.max === 1 ? '0.01' : '1');
+  const hint = opts.hint ? `<div class="config-hint">${escapeHtml(opts.hint)}</div>` : '';
   return `
     <div class="config-field">
       <label class="config-label">${escapeHtml(label)}</label>
+      ${hint}
       <input type="number" class="config-input" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}"
              value="${value}" min="${min}" max="${max}" step="${step}">
     </div>
@@ -2866,9 +2874,11 @@ function cfgSlider(section, key, value, label, opts = {}) {
   const min = opts.min !== undefined ? opts.min : 0;
   const max = opts.max !== undefined ? opts.max : 1;
   const step = opts.step || 0.01;
+  const hint = opts.hint ? `<div class="config-hint">${escapeHtml(opts.hint)}</div>` : '';
   return `
     <div class="config-field">
       <label class="config-label">${escapeHtml(label)}</label>
+      ${hint}
       <div style="display:flex;align-items:center;gap:0.75rem">
         <input type="range" class="config-slider" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}"
                value="${value}" min="${min}" max="${max}" step="${step}"
@@ -2879,10 +2889,12 @@ function cfgSlider(section, key, value, label, opts = {}) {
   `;
 }
 
-function cfgToggle(section, key, value, label) {
+function cfgToggle(section, key, value, label, opts = {}) {
+  const hint = opts.hint ? `<div class="config-hint">${escapeHtml(opts.hint)}</div>` : '';
   return `
     <div class="config-field">
       <label class="config-label">${escapeHtml(label)}</label>
+      ${hint}
       <label class="config-toggle">
         <input type="checkbox" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}" ${value ? 'checked' : ''}>
         <span class="config-toggle-track"></span>
@@ -2891,10 +2903,12 @@ function cfgToggle(section, key, value, label) {
   `;
 }
 
-function cfgTextInput(section, key, value, label) {
+function cfgTextInput(section, key, value, label, opts = {}) {
+  const hint = opts.hint ? `<div class="config-hint">${escapeHtml(opts.hint)}</div>` : '';
   return `
     <div class="config-field">
       <label class="config-label">${escapeHtml(label)}</label>
+      ${hint}
       <input type="text" class="config-input" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}"
              value="${escapeHtml(String(value))}">
     </div>

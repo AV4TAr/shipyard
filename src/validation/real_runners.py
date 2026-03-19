@@ -28,10 +28,14 @@ logger = logging.getLogger(__name__)
 class RealStaticAnalysisRunner(ValidationSignalRunner):
     """Runs ``ruff check`` and parses JSON output into findings."""
 
-    # Map ruff code prefixes to severity levels
+    # Map ruff code prefixes to severity levels.
+    # More specific prefixes are checked first (E5 before E).
     _SEVERITY_MAP: dict[str, Severity] = {
-        "E": Severity.ERROR,
-        "F": Severity.ERROR,
+        "E5": Severity.WARNING,   # style (line length, whitespace)
+        "E": Severity.ERROR,      # syntax/runtime errors
+        "F401": Severity.WARNING, # unused import (not blocking)
+        "F841": Severity.WARNING, # unused variable (not blocking)
+        "F": Severity.ERROR,      # other pyflakes (undefined names, etc.)
         "W": Severity.WARNING,
         "I": Severity.INFO,
         "C": Severity.WARNING,

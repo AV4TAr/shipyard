@@ -198,3 +198,23 @@ def revoke_lease(
     if not revoked:
         raise HTTPException(status_code=404, detail="No active lease for task {}".format(task_id))
     return {"task_id": task_id, "revoked": True}
+
+
+@router.post("/tasks/{task_id}/reset")
+def reset_task(
+    task_id: str,
+    runtime: CLIRuntime = Depends(get_runtime),
+):
+    """Reset a failed/assigned task back to PENDING so agents can retry."""
+    try:
+        tid = _uuid.UUID(task_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid task ID")
+    try:
+        task = runtime.goal_manager.update_task_status(tid, TaskStatus.PENDING)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Task {} not found".format(task_id))
+    # Also revoke any lease
+    if runtime.lease_manager is not None:
+        runtime.lease_manager.revoke(tid)
+    return {"task_id": task_id, "status": "pending"}

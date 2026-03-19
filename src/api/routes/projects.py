@@ -48,6 +48,12 @@ def create_project(
             project.repo_url = body.repo_url
         if body.default_branch is not None:
             project.default_branch = body.default_branch
+        # Re-save if repo fields were set (they're not part of ProjectInput)
+        if body.repo_url is not None or body.default_branch is not None:
+            pm = runtime.project_manager
+            pm._projects[project.project_id] = project
+            if pm._project_repo:
+                pm._project_repo.save(project)
     except HTTPException:
         raise
     except ValueError as exc:
@@ -127,16 +133,29 @@ def update_project(
     body: ProjectUpdateRequest,
     runtime: CLIRuntime = Depends(get_runtime),
 ):
-    """Update a draft/planning project."""
+    """Update a project. Repo fields can be set on any status."""
     try:
         import uuid as _uuid
-        project = runtime.project_manager.update(
-            _uuid.UUID(project_id),
-            title=body.title,
-            description=body.description,
-            priority=body.priority,
-        )
-        # Apply repo fields directly (not in generic update)
+        pm = runtime.project_manager
+        project = pm.get(_uuid.UUID(project_id))
+
+        # Standard fields — only on draft/planning
+        has_standard = body.title or body.description or body.priority
+        if has_standard:
+            if project.status in ("draft", "planning"):
+                if body.title is not None:
+                    project.title = body.title
+                if body.description is not None:
+                    project.description = body.description
+                if body.priority is not None:
+                    project.priority = body.priority
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Can only edit title/description/priority on draft projects",
+                )
+
+        # Repo fields — allowed on any status
         if body.repo_url is not None:
             from pathlib import Path
             repo_path = Path(body.repo_url)
@@ -144,16 +163,21 @@ def update_project(
                 if not repo_path.exists():
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Repository path does not exist: {body.repo_url}",
+                        detail="Repository path does not exist: {}".format(body.repo_url),
                     )
                 if not (repo_path / ".git").exists():
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Not a git repository: {body.repo_url}",
+                        detail="Not a git repository: {}".format(body.repo_url),
                     )
             project.repo_url = body.repo_url
         if body.default_branch is not None:
             project.default_branch = body.default_branch
+
+        # Save
+        pm._projects[project.project_id] = project
+        if pm._project_repo:
+            pm._project_repo.save(project)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
