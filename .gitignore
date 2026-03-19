@@ -57,3 +57,4 @@ node_modules/
 
 # E2E test repo (generated, not committed)
 data/test-repo/
+.claude/worktrees/
