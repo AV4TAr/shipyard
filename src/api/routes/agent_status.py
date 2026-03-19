@@ -212,6 +212,9 @@ def reset_task(
         raise HTTPException(status_code=400, detail="Invalid task ID")
     try:
         task = runtime.goal_manager.update_task_status(tid, TaskStatus.PENDING)
+        # Reset retry count so the task can be claimed again
+        task.retry_count = 0
+        runtime.goal_manager._save_task(task)
     except KeyError:
         raise HTTPException(status_code=404, detail="Task {} not found".format(task_id))
     # Also revoke any lease

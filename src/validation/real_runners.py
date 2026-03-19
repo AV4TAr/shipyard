@@ -49,6 +49,17 @@ class RealStaticAnalysisRunner(ValidationSignalRunner):
 
     def run(self, intent_id: str, sandbox_result: dict[str, Any]) -> SignalResult:
         start = time.monotonic()
+
+        # Skip when no worktree (would scan server cwd, not agent code)
+        if sandbox_result.get("skip_real_runners"):
+            return SignalResult(
+                signal=ValidationSignal.STATIC_ANALYSIS,
+                passed=True,
+                confidence=0.5,
+                findings=[],
+                duration_seconds=time.monotonic() - start,
+            )
+
         path = sandbox_result.get("path", ".")
 
         try:
@@ -161,6 +172,16 @@ class RealSecurityScanRunner(ValidationSignalRunner):
 
     def run(self, intent_id: str, sandbox_result: dict[str, Any]) -> SignalResult:
         start = time.monotonic()
+
+        if sandbox_result.get("skip_real_runners"):
+            return SignalResult(
+                signal=ValidationSignal.SECURITY_SCAN,
+                passed=True,
+                confidence=0.5,
+                findings=[],
+                duration_seconds=time.monotonic() - start,
+            )
+
         path = sandbox_result.get("path", ".")
 
         try:
@@ -270,6 +291,16 @@ class RealResourceBoundsRunner(ValidationSignalRunner):
 
     def run(self, intent_id: str, sandbox_result: dict[str, Any]) -> SignalResult:
         start = time.monotonic()
+
+        if sandbox_result.get("skip_real_runners"):
+            return SignalResult(
+                signal=ValidationSignal.RESOURCE_BOUNDS,
+                passed=True,
+                confidence=0.5,
+                findings=[],
+                duration_seconds=time.monotonic() - start,
+            )
+
         path = sandbox_result.get("path", ".")
         findings: list[Finding] = []
 

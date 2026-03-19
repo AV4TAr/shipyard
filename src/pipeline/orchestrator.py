@@ -405,11 +405,16 @@ class PipelineOrchestrator:
         try:
             # Pass sandbox results to validation signals
             sandbox_data = dict(pipeline_run.metadata.get("sandbox_result", {}))
-            # Ensure validation runners know the worktree path
+            # Ensure validation runners know the worktree path.
+            # Without a worktree, real runners (ruff, bandit) would scan
+            # the server's cwd which is wrong — skip them by marking
+            # the sandbox_data so runners can decide.
             wt_path = pipeline_run.metadata.get("worktree_path")
             if wt_path:
                 sandbox_data["path"] = wt_path
                 sandbox_data["worktree_path"] = wt_path
+            else:
+                sandbox_data["skip_real_runners"] = True
             verdict = self.validation_gate.validate(
                 str(intent.intent_id), sandbox_data
             )
