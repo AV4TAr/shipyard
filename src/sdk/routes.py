@@ -262,8 +262,11 @@ def claim_task(task_id: uuid.UUID, agent_id: Optional[str] = None) -> TaskAssign
                             pm._project_repo.save(project)
                     except Exception:
                         pass
-        except Exception:
-            pass  # Worktree creation is best-effort
+        except Exception as wt_err:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Worktree creation failed for task %s: %s", task_id, wt_err
+            )
 
     # Look up the parent goal for acceptance criteria
     try:

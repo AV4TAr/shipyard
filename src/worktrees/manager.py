@@ -107,6 +107,9 @@ class WorktreeManager:
         if not repo_dir.exists():
             repo_dir = self.ensure_repo(project)
 
+        # Prune stale worktree references from previous runs
+        _run_git("worktree", "prune", cwd=repo_dir)
+
         task_id_short = str(task.task_id)[:8]
         title_slug = _slugify(task.title)
         branch_name = f"task/{task_id_short}-{title_slug}"

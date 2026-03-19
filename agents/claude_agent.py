@@ -1,19 +1,18 @@
-"""Claude-powered Shipyard agent v4 — uses worktrees and the SDK client.
+"""Claude-powered Shipyard agent — tool-use version.
 
-This agent:
-1. Registers with the Shipyard server
-2. Polls for available tasks
-3. Claims a task (gets a lease + worktree if project has a repo)
-4. Reads existing code from the worktree to understand context
-5. Asks Claude to generate code
-6. Writes files into the worktree (real files, not fake diffs)
-7. Submits — server runs real pytest, ruff, bandit, behavioral diff
-8. Heartbeats run automatically in the background
+Uses Claude's tool-use API to let the LLM iteratively write code,
+run tests, see errors, and fix them — like a real developer.
+
+Tools available to Claude:
+  - write_file(path, content)  — write/overwrite a file
+  - read_file(path)            — read a file
+  - list_files(pattern)        — list files matching a glob
+  - run_command(command)        — run a shell command (pytest, ruff, etc.)
+  - task_complete(description)  — signal that the task is done
 
 Usage:
-    python3 agents/claude_agent4.py suricata --profile agents/profiles/backend.yaml
-    python3 agents/claude_agent4.py lagarto --profile agents/profiles/qa.yaml
-    python3 agents/claude_agent4.py rocky --once
+    python3 agents/claude_agent.py suricata --profile agents/profiles/backend.yaml
+    python3 agents/claude_agent.py lagarto --once
 """
 
 import argparse
@@ -23,7 +22,6 @@ import random
 import sys
 import time
 
-# Add the SDK to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "sdk", "python"))
 
 import anthropic
@@ -33,94 +31,225 @@ SHIPYARD_URL = os.environ.get("SHIPYARD_URL", "http://localhost:8001")
 MODEL = os.environ.get("AGENT_MODEL", "anthropic/claude-sonnet-4-20250514")
 POLL_MIN = 5
 POLL_MAX = 10
+MAX_TOOL_TURNS = 60  # safety limit on conversation turns
+
 
 # ---------------------------------------------------------------------------
-# Default system prompt
+# Tool definitions (sent to Claude)
+# ---------------------------------------------------------------------------
+
+TOOLS = [
+    {
+        "name": "write_file",
+        "description": (
+            "Write content to a file in the workspace. Creates parent "
+            "directories as needed. Use this to create or update source "
+            "files, test files, config files, etc."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path from the workspace root (e.g. 'app/main.py')",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The complete file content to write",
+                },
+            },
+            "required": ["path", "content"],
+        },
+    },
+    {
+        "name": "read_file",
+        "description": (
+            "Read the contents of a file in the workspace. Use this to "
+            "understand existing code before modifying it."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path to read",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "list_files",
+        "description": (
+            "List files in the workspace matching a glob pattern. "
+            "Use '**/*.py' for all Python files, '*' for top-level files."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "description": "Glob pattern (e.g. '**/*.py', '*.toml')",
+                },
+            },
+            "required": ["pattern"],
+        },
+    },
+    {
+        "name": "run_command",
+        "description": (
+            "Run a shell command in the workspace directory. Use this to "
+            "run tests (python3 -m pytest), linters (ruff check .), "
+            "install deps (python3 -m pip install -r requirements.txt), etc. "
+            "Returns stdout, stderr, and exit code."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Shell command to run",
+                },
+            },
+            "required": ["command"],
+        },
+    },
+    {
+        "name": "task_complete",
+        "description": (
+            "Signal that you have finished the task. Call this ONLY when "
+            "all code is written, all tests pass, and ruff reports no errors. "
+            "The code will be submitted to the CI/CD pipeline for final validation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string",
+                    "description": "Summary of what was implemented",
+                },
+            },
+            "required": ["description"],
+        },
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# Tool execution
+# ---------------------------------------------------------------------------
+
+
+def execute_tool(workspace, tool_name, tool_input):
+    """Execute a tool call and return the result string."""
+    if tool_name == "write_file":
+        path = tool_input["path"]
+        content = tool_input["content"]
+        workspace.write(path, content)
+        return f"File written: {path} ({len(content)} chars)"
+
+    elif tool_name == "read_file":
+        path = tool_input["path"]
+        try:
+            content = workspace.read(path)
+            return content
+        except FileNotFoundError:
+            return f"Error: File not found: {path}"
+
+    elif tool_name == "list_files":
+        pattern = tool_input["pattern"]
+        files = workspace.list_files(pattern)
+        if not files:
+            return "No files found matching: " + pattern
+        return "\n".join(sorted(files))
+
+    elif tool_name == "run_command":
+        command = tool_input["command"]
+        # Add PYTHONPATH for src/ layouts
+        env = {}
+        if workspace.exists("src"):
+            env["PYTHONPATH"] = str(workspace.path / "src")
+        result = workspace.run(command, env=env, timeout=60)
+        output = ""
+        if result.stdout:
+            output += result.stdout
+        if result.stderr:
+            output += "\n" + result.stderr if output else result.stderr
+        status = "OK" if result.success else f"FAILED (exit {result.returncode})"
+        return f"[{status}]\n{output[-3000:]}" if output else f"[{status}]"
+
+    elif tool_name == "task_complete":
+        return "TASK_COMPLETE"
+
+    return f"Unknown tool: {tool_name}"
+
+
+# ---------------------------------------------------------------------------
+# System prompt and helpers
 # ---------------------------------------------------------------------------
 
 _DEFAULT_SYSTEM_PROMPT = """\
-You are a coding agent named {agent_name} working on a software project.
-You work inside the Shipyard CI/CD pipeline as an autonomous coding agent.
+You are a coding agent named {agent_name} working inside the Shipyard CI/CD pipeline.
 
-Your code will be validated by real tools before it can be deployed:
-- ruff (linter): max line length 100 chars, no unused imports
-- bandit (security scanner): no hardcoded passwords, no shell injection
-- pytest: all tests must pass
+You have tools to write files, read files, run commands, and list files in your workspace.
+Work iteratively like a real developer:
 
-Rules:
-- Write clean, production-quality Python 3.11+ code
-- Use type hints on all function signatures
-- Keep lines under 100 characters (enforced by ruff)
-- Do NOT import modules you don't use
-- Do NOT use f-strings without placeholders (use regular strings instead)
-- Write focused, minimal code — only files needed for the task
-- When creating a new project, include pyproject.toml with pytest config
-- When writing tests, use pytest (not unittest)
-- Use descriptive names, keep functions short and focused
-- Handle errors properly — don't use bare except
+1. First, understand the task and check what already exists (list_files, read_file)
+2. Create a pyproject.toml with deps and tool config
+3. Write the code module by module — don't write everything at once
+4. After writing each module, run tests to verify
+5. Run ruff to check for lint issues, fix any problems
+6. Only call task_complete when ALL tests pass and ruff is clean
+
+CRITICAL rules:
+- Use ONLY: fastapi, uvicorn, httpx, pytest, pydantic as external deps
+- For databases: use Python stdlib sqlite3 — NOT sqlalchemy, NOT aiosqlite
+- Keep lines under 100 characters
+- No unused imports
+- All tests must pass: python3 -m pytest -p no:asyncio -x
+- Ruff must be clean: ruff check .
+- Install deps before running tests: python3 -m pip install -r requirements.txt -q
 """
-
-# ---------------------------------------------------------------------------
-# Workspace-aware prompt
-# ---------------------------------------------------------------------------
 
 _WORKTREE_PROMPT_SUFFIX = """
-
-WORKSPACE CONTEXT:
-You are working in a real git worktree at: {worktree_path}
-Branch: {branch_name}
+WORKSPACE: {worktree_path}
+BRANCH: {branch_name}
 
 {existing_files_section}
-
-IMPORTANT: Your response must be ONLY valid JSON. When you create or modify files,
-provide the COMPLETE file content (not just the changed parts). The system will
-write these files directly to the worktree and run real tests.
 """
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Claude-powered Shipyard agent v4")
-    parser.add_argument("name", help="Agent name (e.g. 'suricata', 'lagarto')")
-    parser.add_argument(
-        "--profile", type=str, default=None,
-        help="Path to agent profile YAML (e.g. agents/profiles/backend.yaml)",
-    )
-    parser.add_argument(
-        "--capabilities", nargs="+", default=None,
-        help="Agent capabilities (overrides profile)",
-    )
-    parser.add_argument(
-        "--languages", nargs="+", default=None,
-        help="Languages (overrides profile)",
-    )
-    parser.add_argument(
-        "--frameworks", nargs="+", default=None,
-        help="Frameworks (overrides profile)",
-    )
-    parser.add_argument(
-        "--model", default=MODEL,
-        help="OpenRouter model (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--once", action="store_true",
-        help="Process one task and exit (don't loop)",
-    )
-    return parser.parse_args()
+def scan_workspace(workspace):
+    """Read existing files from the workspace for context."""
+    if workspace is None:
+        return "The workspace is not available."
+    files = []
+    try:
+        all_files = workspace.list_files("**/*")
+        py_files = [f for f in all_files if f.endswith((".py", ".toml", ".txt", ".md", ".yaml"))]
+        for fp in sorted(set(py_files))[:15]:
+            try:
+                content = workspace.read(fp)
+                if len(content) > 3000:
+                    files.append(f"### {fp} (truncated)\n{content[:2000]}...")
+                else:
+                    files.append(f"### {fp}\n{content}")
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if files:
+        return "EXISTING FILES:\n\n" + "\n\n".join(files)
+    return "The workspace is empty — this is a new project."
 
 
 def load_profile(path):
-    """Load an agent profile from a YAML file."""
+    """Load an agent profile from YAML."""
     try:
         import yaml
         with open(path) as f:
             return yaml.safe_load(f)
     except ImportError:
-        # Fallback: basic parsing
         profile = {}
         with open(path) as f:
             for line in f:
@@ -136,7 +265,6 @@ def load_profile(path):
                             i.strip().strip("'\"") for i in items if i.strip()
                         ]
                     elif value == "|":
-                        # Multiline — read until un-indented
                         lines = []
                         for next_line in f:
                             if next_line.startswith("  ") or next_line.startswith("\t"):
@@ -149,8 +277,226 @@ def load_profile(path):
         return profile
 
 
+def log(agent_name, msg):
+    print(f"[agent-{agent_name}] {msg}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Fetch system constraints
+# ---------------------------------------------------------------------------
+
+
+def fetch_constraints():
+    """Fetch system constraints from the Shipyard server."""
+    try:
+        import requests as _req
+        resp = _req.get(f"{SHIPYARD_URL}/api/config/constraints", timeout=5)
+        if resp.status_code == 200:
+            rules = resp.json().get("constraints", [])
+            if rules:
+                lines = []
+                for r in rules:
+                    sev = r.get("severity", "SHOULD")
+                    desc = r.get("description", r.get("rule", ""))
+                    lines.append(f"  [{sev}] {desc}")
+                return "\nSYSTEM CONSTRAINTS:\n" + "\n".join(lines)
+    except Exception:
+        pass
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Tool-use conversation loop
+# ---------------------------------------------------------------------------
+
+
+def run_tool_use_loop(llm_client, model, agent_name, task, system_prompt,
+                      workspace):
+    """Run the tool-use conversation loop.
+
+    Returns (success: bool, description: str).
+    """
+    formatted_system = system_prompt.format(agent_name=f"agent-{agent_name}")
+
+    # Build initial context
+    existing_files = scan_workspace(workspace)
+    constraints = fetch_constraints()
+
+    workspace_info = ""
+    if workspace:
+        workspace_info = _WORKTREE_PROMPT_SUFFIX.format(
+            worktree_path=str(workspace),
+            branch_name=task.get("branch_name", "unknown"),
+            existing_files_section=existing_files,
+        )
+
+    user_message = f"""Task to complete:
+- Title: {task.get('title', 'Unknown')}
+- Description: {task.get('description', 'No description')}
+- Constraints: {', '.join(task.get('constraints', [])) or 'None'}
+- Acceptance criteria: {', '.join(task.get('acceptance_criteria', [])) or 'None'}
+{constraints}
+{workspace_info}
+
+Work iteratively: write code, run tests, fix issues, repeat until everything passes.
+Then call task_complete."""
+
+    messages = [{"role": "user", "content": user_message}]
+
+    for turn in range(MAX_TOOL_TURNS):
+        log(agent_name, f"  Turn {turn + 1}/{MAX_TOOL_TURNS}")
+
+        response = llm_client.messages.create(
+            model=model,
+            max_tokens=16384,
+            system=formatted_system,
+            tools=TOOLS,
+            messages=messages,
+        )
+
+        # Process the response
+        assistant_content = response.content
+        messages.append({"role": "assistant", "content": assistant_content})
+
+        # Check if Claude wants to use tools
+        tool_uses = [b for b in assistant_content if b.type == "tool_use"]
+
+        if not tool_uses:
+            # Claude sent text only — it might be thinking or done
+            text = "".join(
+                b.text for b in assistant_content if hasattr(b, "text")
+            )
+            if text:
+                log(agent_name, f"  Claude: {text[:200]}")
+            break
+
+        # Execute each tool call
+        tool_results = []
+        task_done = False
+        done_description = ""
+
+        for tool_use in tool_uses:
+            tool_name = tool_use.name
+            tool_input = tool_use.input
+
+            if tool_name == "write_file":
+                log(agent_name, f"  -> write_file: {tool_input['path']}")
+            elif tool_name == "run_command":
+                log(agent_name, f"  -> run: {tool_input['command'][:60]}")
+            elif tool_name == "read_file":
+                log(agent_name, f"  -> read: {tool_input['path']}")
+            elif tool_name == "list_files":
+                log(agent_name, f"  -> list: {tool_input['pattern']}")
+            elif tool_name == "task_complete":
+                log(agent_name, f"  -> TASK COMPLETE: {tool_input['description'][:80]}")
+
+            result = execute_tool(workspace, tool_name, tool_input)
+
+            if result == "TASK_COMPLETE":
+                task_done = True
+                done_description = tool_input["description"]
+                result = "Task marked as complete. Submitting to pipeline."
+
+            tool_results.append({
+                "type": "tool_result",
+                "tool_use_id": tool_use.id,
+                "content": result[:4000],  # truncate large outputs
+            })
+
+        messages.append({"role": "user", "content": tool_results})
+
+        if task_done:
+            return True, done_description
+
+    log(agent_name, f"  Reached max turns ({MAX_TOOL_TURNS})")
+    return False, "Max turns reached without completing"
+
+
+# ---------------------------------------------------------------------------
+# Process task
+# ---------------------------------------------------------------------------
+
+
+def process_task(sdk_client, llm_client, model, agent_name, task_assignment,
+                 system_prompt):
+    """Claim a task and run the tool-use loop."""
+    task_id = task_assignment.task_id
+
+    try:
+        claimed = sdk_client.claim_task(task_id)
+        log(agent_name, f"Claimed: {claimed.title}")
+        if claimed.worktree_path:
+            log(agent_name, f"  Worktree: {claimed.worktree_path}")
+            log(agent_name, f"  Branch: {claimed.branch_name}")
+        if claimed.lease_expires_at:
+            log(agent_name, f"  Lease: {claimed.lease_expires_at}")
+    except Exception as e:
+        log(agent_name, f"Claim failed: {e}")
+        return
+
+    workspace = sdk_client.workspace
+    if not workspace:
+        log(agent_name, "No workspace — skipping (worktree not created)")
+        return
+
+    task_dict = {
+        "title": claimed.title,
+        "description": claimed.description,
+        "constraints": claimed.constraints,
+        "target_files": claimed.target_files,
+        "acceptance_criteria": claimed.acceptance_criteria,
+        "branch_name": claimed.branch_name,
+    }
+
+    # Run the tool-use conversation
+    sdk_client.set_phase("calling_llm")
+    try:
+        success, description = run_tool_use_loop(
+            llm_client, model, agent_name, task_dict, system_prompt,
+            workspace,
+        )
+    except Exception as e:
+        log(agent_name, f"Tool-use loop error: {e}")
+        return
+
+    if not success:
+        log(agent_name, "Agent could not complete the task")
+        return
+
+    # Submit to pipeline
+    sdk_client.set_phase("submitting")
+    try:
+        files_changed = workspace.changed_files()
+        feedback = sdk_client.submit_work(
+            task_id=task_id,
+            description=description,
+            files_changed=files_changed,
+        )
+        log(agent_name, f"=> {feedback.status}: {feedback.message}")
+        for s in feedback.suggestions:
+            log(agent_name, f"   -> {s}")
+    except Exception as e:
+        log(agent_name, f"Submit error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Claude Shipyard agent (tool-use)")
+    parser.add_argument("name", help="Agent name")
+    parser.add_argument("--profile", type=str, default=None)
+    parser.add_argument("--capabilities", nargs="+", default=None)
+    parser.add_argument("--languages", nargs="+", default=None)
+    parser.add_argument("--frameworks", nargs="+", default=None)
+    parser.add_argument("--model", default=MODEL)
+    parser.add_argument("--once", action="store_true")
+    return parser.parse_args()
+
+
 def build_config(args):
-    """Build agent config from args + profile."""
     config = {
         "name": args.name,
         "capabilities": ["python", "backend", "testing"],
@@ -173,436 +519,14 @@ def build_config(args):
     return config
 
 
-def log(agent_name, msg):
-    print(f"[agent-{agent_name}] {msg}", flush=True)
-
-
-def scan_workspace(workspace):
-    """Read existing files from the workspace for context."""
-    if workspace is None:
-        return ""
-
-    files_info = []
-    try:
-        all_files = workspace.list_files("**/*.py")
-        # Also get yaml, toml, md
-        all_files += workspace.list_files("**/*.yaml")
-        all_files += workspace.list_files("**/*.yml")
-        all_files += workspace.list_files("**/*.toml")
-        all_files += workspace.list_files("**/*.md")
-
-        # Limit to first 20 files to avoid overwhelming the prompt
-        for filepath in sorted(set(all_files))[:20]:
-            try:
-                content = workspace.read(filepath)
-                # Skip very large files
-                if len(content) > 5000:
-                    files_info.append(
-                        f"### {filepath} (truncated — {len(content)} chars)\n"
-                        f"{content[:2000]}\n... (truncated)"
-                    )
-                else:
-                    files_info.append(f"### {filepath}\n{content}")
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    if files_info:
-        return "EXISTING FILES IN THE REPO:\n\n" + "\n\n".join(files_info)
-    return "The repository is empty (no source files yet)."
-
-
-def format_feedback_for_retry(feedback_data, local_test_output=None):
-    """Format pipeline feedback and local test output into a retry prompt addition.
-
-    Args:
-        feedback_data: The FeedbackMessage dict from the pipeline.
-        local_test_output: Optional string of local test stderr/stdout.
-
-    Returns:
-        A string to append to the Claude prompt for retry attempts.
-    """
-    parts = ["PREVIOUS ATTEMPT FAILED. Here is the error output:"]
-
-    # Pipeline feedback
-    if feedback_data:
-        if isinstance(feedback_data, dict):
-            msg = feedback_data.get("message", "")
-            if msg:
-                parts.append(f"\nPipeline result: {msg}")
-
-            suggestions = feedback_data.get("suggestions", [])
-            if suggestions:
-                parts.append("\nPipeline suggestions:")
-                for s in suggestions:
-                    parts.append(f"  - {s}")
-
-            validation = feedback_data.get("validation_results", {})
-            if validation:
-                # Extract signal results for actionable feedback
-                signals = validation.get("signal_results", {})
-                if signals:
-                    parts.append("\nValidation signal results:")
-                    for signal_name, signal_data in signals.items():
-                        passed = signal_data.get("passed", "unknown")
-                        detail = signal_data.get("detail", "")
-                        parts.append(f"  {signal_name}: {'PASS' if passed else 'FAIL'}")
-                        if detail:
-                            parts.append(f"    {detail}")
-
-                next_actions = validation.get("next_actions", [])
-                if next_actions:
-                    parts.append("\nRecommended actions:")
-                    for action in next_actions:
-                        parts.append(f"  - {action}")
-
-    # Local test output
-    if local_test_output:
-        parts.append(f"\nLocal test output:\n{local_test_output[-2000:]}")
-
-    parts.append(
-        "\nFix the issues above and regenerate the files. "
-        "The current files in the workspace are from your previous attempt."
-    )
-    return "\n".join(parts)
-
-
-def ask_claude(llm_client, model, agent_name, task, system_prompt, workspace,
-               feedback=None):
-    """Ask Claude to generate code for a task.
-
-    Args:
-        feedback: Optional string with error/feedback from a previous attempt.
-                  When present, it is appended to the user prompt so Claude
-                  can see what went wrong and fix it.
-    """
-    formatted_system = system_prompt.format(agent_name=f"agent-{agent_name}")
-
-    # Build context about the workspace
-    if workspace:
-        existing_files = scan_workspace(workspace)
-        workspace_info = _WORKTREE_PROMPT_SUFFIX.format(
-            worktree_path=str(workspace),
-            branch_name=task.get("branch_name", "unknown"),
-            existing_files_section=existing_files,
-        )
-    else:
-        workspace_info = "\nYou are working in diff-only mode (no workspace)."
-
-    # Fetch system-level constraints from the server
-    system_constraints = ""
-    try:
-        import requests as _req
-        resp = _req.get(f"{SHIPYARD_URL}/api/config/constraints", timeout=5)
-        if resp.status_code == 200:
-            cdata = resp.json()
-            rules = cdata.get("constraints", [])
-            if rules:
-                lines = []
-                for r in rules:
-                    sev = r.get("severity", "SHOULD")
-                    desc = r.get("description", r.get("rule", ""))
-                    lines.append(f"  [{sev}] {desc}")
-                system_constraints = (
-                    "\n\nSYSTEM CONSTRAINTS (from the pipeline):\n"
-                    + "\n".join(lines)
-                )
-    except Exception:
-        pass
-
-    task_constraints = task.get("constraints", [])
-    constraints_text = ", ".join(task_constraints) if task_constraints else "None"
-
-    user_prompt = f"""Task to complete:
-- Title: {task.get('title', 'Unknown')}
-- Description: {task.get('description', 'No description')}
-- Constraints: {constraints_text}
-- Target files: {', '.join(task.get('target_files', [])) or 'Agent decides'}
-- Acceptance criteria: {', '.join(task.get('acceptance_criteria', [])) or 'None specified'}
-{system_constraints}
-{workspace_info}
-
-Respond with ONLY valid JSON (no markdown fences, no explanation) in this format:
-{{
-  "files": {{
-    "path/to/file.py": "complete file content here",
-    "tests/test_file.py": "complete test file content"
-  }},
-  "description": "One paragraph explaining what you implemented and why"
-}}"""
-
-    # Append retry feedback if this is a subsequent attempt
-    if feedback:
-        user_prompt += f"\n\n{feedback}"
-
-    log(agent_name, f"Asking Claude ({model})...")
-    response = llm_client.messages.create(
-        model=model,
-        max_tokens=16384,
-        system=formatted_system,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-
-    text = response.content[0].text.strip()
-    # Strip markdown fences if present
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-
-    result = json.loads(text)
-    return result["files"], result["description"]
-
-
-MAX_PIPELINE_ATTEMPTS = 3
-MAX_LOCAL_FIX_ATTEMPTS = 2
-
-
-def _write_and_prep_workspace(sdk_client, workspace, files, agent_name):
-    """Write files, install deps, run ruff. Returns ruff status string."""
-    sdk_client.set_phase("writing_files")
-    for filepath, content in files.items():
-        workspace.write(filepath, content)
-        log(agent_name, f"  Wrote: {filepath}")
-
-    # Install dependencies
-    if workspace.exists("requirements.txt"):
-        log(agent_name, "  Installing dependencies (requirements.txt)...")
-        pip_result = workspace.run(
-            "python3 -m pip install -r requirements.txt -q"
-        )
-        if not pip_result.success:
-            log(agent_name, f"  pip install failed: {pip_result.stderr[-200:]}")
-    elif workspace.exists("pyproject.toml"):
-        log(agent_name, "  Installing dependencies (pyproject.toml)...")
-        pip_result = workspace.run("python3 -m pip install -e . -q")
-        if not pip_result.success:
-            log(agent_name, "  editable install failed, trying core deps...")
-            workspace.run(
-                "python3 -m pip install fastapi uvicorn httpx pytest -q"
-            )
-
-    # Run ruff auto-fix before testing/submitting
-    log(agent_name, "  Running ruff auto-fix...")
-    workspace.run("ruff check --fix .")
-    workspace.run("ruff format .")
-    ruff_check = workspace.run("ruff check --output-format=text .")
-    if ruff_check.returncode == 0:
-        log(agent_name, "  Ruff: clean")
-    else:
-        remaining = len([
-            line for line in ruff_check.stdout.splitlines()
-            if line.strip() and not line.startswith("Found")
-        ])
-        log(agent_name, f"  Ruff: {remaining} issues remaining after auto-fix")
-
-
-def _run_local_tests(sdk_client, workspace, agent_name):
-    """Run local tests. Returns (success: bool, output: str)."""
-    sdk_client.set_phase("running_tests")
-    test_env = {}
-    if workspace.exists("src"):
-        test_env["PYTHONPATH"] = str(workspace.path / "src")
-    test_result = workspace.run(
-        "python3 -m pytest -p no:asyncio -x -q",
-        env=test_env,
-    )
-    output = ""
-    if test_result.success:
-        log(agent_name, "  Local tests: PASSED")
-    else:
-        output = (test_result.stdout or "") + "\n" + (test_result.stderr or "")
-        log(agent_name, f"  Local tests: FAILED (exit {test_result.returncode})")
-        log(agent_name, f"  {output[-500:]}")
-    return test_result.success, output
-
-
-def process_task(sdk_client, llm_client, model, agent_name, task_assignment, system_prompt):
-    """Process a single task with up to 3 pipeline attempts.
-
-    Each attempt:
-      1. Ask Claude for code (with feedback from prior failures if any)
-      2. Write files, install deps, run ruff --fix
-      3. Run local tests — if they fail, ask Claude to fix (up to 2 local retries)
-      4. Submit to pipeline
-      5. If accepted → done; if rejected → retry with feedback
-    """
-    task_id = task_assignment.task_id
-
-    # Claim (gets lease + worktree automatically)
-    try:
-        claimed = sdk_client.claim_task(task_id)
-        log(agent_name, f"Claimed: {claimed.title}")
-        if claimed.worktree_path:
-            log(agent_name, f"  Worktree: {claimed.worktree_path}")
-            log(agent_name, f"  Branch: {claimed.branch_name}")
-        if claimed.lease_expires_at:
-            log(agent_name, f"  Lease expires: {claimed.lease_expires_at}")
-    except Exception as e:
-        log(agent_name, f"Claim failed: {e}")
-        return
-
-    # Build task dict for the prompt
-    task_dict = {
-        "title": claimed.title,
-        "description": claimed.description,
-        "constraints": claimed.constraints,
-        "target_files": claimed.target_files,
-        "acceptance_criteria": claimed.acceptance_criteria,
-        "branch_name": claimed.branch_name,
-    }
-
-    workspace = sdk_client.workspace
-    retry_feedback = None  # Feedback string for retry attempts
-
-    for attempt in range(1, MAX_PIPELINE_ATTEMPTS + 1):
-        log(agent_name, f"--- Attempt {attempt}/{MAX_PIPELINE_ATTEMPTS} ---")
-
-        # Ask Claude (heartbeat runs in background automatically)
-        try:
-            sdk_client.set_phase("calling_llm")
-            files, description = ask_claude(
-                llm_client, model, agent_name, task_dict, system_prompt,
-                workspace, feedback=retry_feedback,
-            )
-            log(
-                agent_name,
-                f"Claude produced {len(files)} file(s): {', '.join(files.keys())}",
-            )
-        except json.JSONDecodeError as e:
-            log(agent_name, f"Claude returned invalid JSON: {e}")
-            retry_feedback = format_feedback_for_retry(
-                None, f"Claude returned invalid JSON: {e}"
-            )
-            continue
-        except Exception as e:
-            log(agent_name, f"LLM error: {e}")
-            return  # Non-retryable LLM error (auth, network, etc.)
-
-        if workspace:
-            # Write files and prep workspace
-            _write_and_prep_workspace(sdk_client, workspace, files, agent_name)
-
-            # Run local tests with fix-before-submit loop
-            tests_pass = False
-            local_test_output = ""
-            for local_attempt in range(1, MAX_LOCAL_FIX_ATTEMPTS + 1):
-                tests_pass, local_test_output = _run_local_tests(
-                    sdk_client, workspace, agent_name,
-                )
-                if tests_pass:
-                    break
-
-                if local_attempt < MAX_LOCAL_FIX_ATTEMPTS:
-                    log(
-                        agent_name,
-                        f"  Local fix attempt {local_attempt}/{MAX_LOCAL_FIX_ATTEMPTS}"
-                        " — asking Claude to fix test failures...",
-                    )
-                    local_fix_feedback = format_feedback_for_retry(
-                        None, local_test_output,
-                    )
-                    try:
-                        sdk_client.set_phase("calling_llm")
-                        files, description = ask_claude(
-                            llm_client, model, agent_name, task_dict,
-                            system_prompt, workspace,
-                            feedback=local_fix_feedback,
-                        )
-                        log(
-                            agent_name,
-                            f"  Claude produced {len(files)} file(s) for fix",
-                        )
-                        _write_and_prep_workspace(
-                            sdk_client, workspace, files, agent_name,
-                        )
-                    except Exception as e:
-                        log(agent_name, f"  LLM fix error: {e}")
-                        break
-
-            # Submit without diff — server generates it from worktree
-            try:
-                sdk_client.set_phase("submitting")
-                feedback = sdk_client.submit_work(
-                    task_id=task_id,
-                    description=description,
-                    files_changed=list(files.keys()),
-                )
-                log(agent_name, f"=> {feedback.status}: {feedback.message}")
-                for s in feedback.suggestions:
-                    log(agent_name, f"   -> {s}")
-
-                if feedback.status == "accepted":
-                    log(agent_name, "Task completed successfully!")
-                    return
-                elif feedback.status == "needs_revision":
-                    log(agent_name, "Task needs human approval — moving on.")
-                    return
-                else:
-                    # Rejected — build feedback for retry
-                    feedback_dict = {
-                        "message": feedback.message,
-                        "suggestions": feedback.suggestions,
-                        "validation_results": feedback.validation_results,
-                    }
-                    retry_feedback = format_feedback_for_retry(
-                        feedback_dict, local_test_output,
-                    )
-                    if attempt < MAX_PIPELINE_ATTEMPTS:
-                        log(agent_name, "Retrying with pipeline feedback...")
-                    continue
-            except Exception as e:
-                log(agent_name, f"Submit error: {e}")
-                return  # Submit errors are not retryable
-        else:
-            # Diff-only mode (no worktree) — no retry loop for this mode
-            sdk_client.set_phase("submitting")
-            diff_parts = []
-            for path, content in files.items():
-                lines = content.split("\n")
-                diff_parts.append(f"diff --git a/{path} b/{path}")
-                diff_parts.append("new file mode 100644")
-                diff_parts.append(f"--- /dev/null")
-                diff_parts.append(f"+++ b/{path}")
-                diff_parts.append(f"@@ -0,0 +1,{len(lines)} @@")
-                for fline in lines:
-                    diff_parts.append(f"+{fline}")
-            diff = "\n".join(diff_parts)
-
-            try:
-                feedback = sdk_client.submit_work(
-                    task_id=task_id,
-                    diff=diff,
-                    description=description,
-                    files_changed=list(files.keys()),
-                )
-                log(agent_name, f"=> {feedback.status}: {feedback.message}")
-            except Exception as e:
-                log(agent_name, f"Submit error: {e}")
-            return  # No retry in diff-only mode
-
-    # All attempts exhausted
-    log(
-        agent_name,
-        f"All {MAX_PIPELINE_ATTEMPTS} attempts failed for task {task_id}. Moving on.",
-    )
-
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
-
-
 def main():
     args = parse_args()
     agent_name = args.name
-    agent_id = f"agent-{agent_name}"
     config = build_config(args)
 
-    # Check for API key
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
         print("Error: OPENROUTER_API_KEY not set")
-        print("  export OPENROUTER_API_KEY='sk-or-v1-...'")
         sys.exit(1)
 
     llm_client = anthropic.Anthropic(
@@ -610,25 +534,22 @@ def main():
         base_url="https://openrouter.ai/api",
     )
 
-    # Create SDK client (handles registration, heartbeats, workspace)
     sdk_client = ShipyardClient(
         base_url=SHIPYARD_URL,
-        agent_id=agent_id,
+        agent_id=f"agent-{agent_name}",
         name=agent_name,
         capabilities=config["capabilities"],
         languages=config["languages"],
         frameworks=config["frameworks"],
     )
 
-    log(agent_name, "Starting up...")
+    log(agent_name, "Starting up (tool-use mode)...")
     log(agent_name, f"  Server: {SHIPYARD_URL}")
     log(agent_name, f"  Model: {args.model}")
-    log(agent_name, f"  Capabilities: {config['capabilities']}")
 
-    # Register
     try:
         sdk_client.register()
-        log(agent_name, "Registered successfully")
+        log(agent_name, "Registered")
     except Exception as e:
         log(agent_name, f"Registration warning: {e}")
 
@@ -637,24 +558,25 @@ def main():
     if args.once:
         tasks = sdk_client.list_tasks()
         if tasks:
-            process_task(sdk_client, llm_client, args.model, agent_name, tasks[0], system_prompt)
+            process_task(
+                sdk_client, llm_client, args.model, agent_name,
+                tasks[0], system_prompt,
+            )
         else:
             log(agent_name, "No tasks available.")
         sdk_client.close()
         return
 
-    # Loop forever
-    log(agent_name, "Polling for tasks (Ctrl+C to stop)...")
+    log(agent_name, "Polling (Ctrl+C to stop)...")
     try:
         while True:
             try:
                 tasks = sdk_client.list_tasks()
                 if tasks:
-                    task = tasks[0]
-                    log(agent_name, f"Found task: '{task.title}'")
+                    log(agent_name, f"Found: '{tasks[0].title}'")
                     process_task(
-                        sdk_client, llm_client, args.model,
-                        agent_name, task, system_prompt,
+                        sdk_client, llm_client, args.model, agent_name,
+                        tasks[0], system_prompt,
                     )
                 else:
                     log(agent_name, "No tasks. Waiting...")
@@ -662,9 +584,7 @@ def main():
                 raise
             except Exception as e:
                 log(agent_name, f"Error: {e}")
-
-            wait = random.uniform(POLL_MIN, POLL_MAX)
-            time.sleep(wait)
+            time.sleep(random.uniform(POLL_MIN, POLL_MAX))
     except KeyboardInterrupt:
         log(agent_name, "Shutting down...")
     finally:
