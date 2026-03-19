@@ -104,6 +104,7 @@ declare -a AGENTS=(
     "lagarto:qa"
     "unicornio:frontend"
     "rocky:architect"
+    "docu:docs"
 )
 
 # Create session with first pane
