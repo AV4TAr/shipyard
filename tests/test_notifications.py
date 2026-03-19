@@ -56,20 +56,20 @@ class TestEventType:
             "goal.created", "goal.activated", "goal.completed",
             "agent.registered", "deploy.started", "deploy.completed",
             "task.routed", "routing.fallback",
-            "anomaly.detected",
+            "anomaly.detected", "agent.status_updated", "lease.expired",
         ]
         actual = [e.value for e in EventType]
         assert sorted(actual) == sorted(expected)
 
     def test_event_type_count(self):
-        assert len(EventType) == 15
+        assert len(EventType) == 17
 
 
 class TestEventModel:
     def test_creation(self):
         event = _make_event()
         assert event.event_type == EventType.PIPELINE_PASSED
-        assert event.source == "ai-cicd"
+        assert event.source == "shipyard"
         assert event.data["pipeline_id"] == "abc-123"
 
     def test_serialization_roundtrip(self):
@@ -329,7 +329,7 @@ class TestFormatEventSummary:
 
     def test_contains_source(self):
         summary = format_event_summary(_make_event())
-        assert "(ai-cicd)" in summary
+        assert "(shipyard)" in summary
 
     def test_contains_key_data_fields(self):
         event = _make_event(data={"pipeline_id": "p-1", "agent_id": "a-2"})

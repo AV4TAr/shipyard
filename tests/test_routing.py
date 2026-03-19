@@ -443,7 +443,7 @@ class TestRouterBatch:
 class TestRoutingBridge:
     """Tests for RoutingBridge integration."""
 
-    def test_route_and_assign_creates_intent(self) -> None:
+    def test_route_and_assign_marks_task_assigned(self) -> None:
         registry = AgentRegistry()
         registry.register(
             _make_agent("a1", primary=AgentCapability.BACKEND, languages=["python"])
@@ -457,23 +457,16 @@ class TestRoutingBridge:
         )
 
         goal_manager = MagicMock()
-        pipeline_orchestrator = MagicMock()
 
-        decision = bridge.route_and_assign(task, goal_manager, pipeline_orchestrator)
+        decision = bridge.route_and_assign(task, goal_manager)
 
         assert decision.selected_agent_id is not None
         # Goal manager should have been called to mark task ASSIGNED.
         goal_manager.update_task_status.assert_called_once_with(
             task.task_id, TaskStatus.ASSIGNED
         )
-        # Pipeline should have been kicked off.
-        pipeline_orchestrator.run.assert_called_once()
-        call_args = pipeline_orchestrator.run.call_args
-        intent = call_args[0][0]
-        assert intent.agent_id == decision.selected_agent_id
-        assert intent.target_files == task.target_files
 
-    def test_route_and_assign_fallback_adds_metadata(self) -> None:
+    def test_route_and_assign_fallback_still_assigns(self) -> None:
         registry = AgentRegistry()
         # Only generic agent available.
         router = TaskRouter(registry)
@@ -485,18 +478,16 @@ class TestRoutingBridge:
         )
 
         goal_manager = MagicMock()
-        pipeline_orchestrator = MagicMock()
 
-        decision = bridge.route_and_assign(task, goal_manager, pipeline_orchestrator)
+        decision = bridge.route_and_assign(task, goal_manager)
 
         assert decision.fallback_used
-        # Check the intent metadata includes fallback note.
-        call_args = pipeline_orchestrator.run.call_args
-        intent = call_args[0][0]
-        assert intent.metadata is not None
-        assert intent.metadata.get("fallback_used") is True
+        assert decision.selected_agent_id == "generic"
+        goal_manager.update_task_status.assert_called_once_with(
+            task.task_id, TaskStatus.ASSIGNED
+        )
 
-    def test_manual_route_no_pipeline(self) -> None:
+    def test_manual_route_leaves_task_pending(self) -> None:
         registry = AgentRegistry()
         router = TaskRouter(registry)
         bridge = RoutingBridge(router)
@@ -504,10 +495,9 @@ class TestRoutingBridge:
         task = _make_task(description="Something")
 
         goal_manager = MagicMock()
-        pipeline_orchestrator = MagicMock()
 
         # Override routing to use MANUAL by routing directly
         decision = router.route(task, strategy=RoutingStrategy.MANUAL)
         assert decision.selected_agent_id is None
-        # Pipeline should NOT be called for manual.
-        pipeline_orchestrator.run.assert_not_called()
+        # Goal manager should NOT be called — task stays PENDING.
+        goal_manager.update_task_status.assert_not_called()

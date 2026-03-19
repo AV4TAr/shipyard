@@ -1,4 +1,4 @@
-# AI-CICD Default Pipeline Configuration
+# Shipyard Default Pipeline Configuration
 # ========================================
 # Sensible defaults for all pipeline thresholds, weights, and timeouts.
 
@@ -47,7 +47,7 @@ deploy_routes:
 # Trust scoring parameters
 trust:
   # New agents start with this baseline trust score
-  baseline_trust: 0.1
+  baseline_trust: 0.5
   # Number of deployments to reach full tenure bonus
   tenure_ramp_deployments: 100
   # Weight components for trust score computation
@@ -63,6 +63,17 @@ sandbox:
     max_cpu: 1.0
     max_memory_mb: 512
     max_disk_mb: 1024
+
+# Lease-based task claims
+leases:
+  # How long (seconds) a lease lasts before expiring
+  duration: 120
+  # Recommended heartbeat interval for agents (seconds)
+  heartbeat_interval: 30
+  # Extra grace period after expiry before sweep resets the task
+  grace_period: 15
+  # How often the background sweep loop runs (seconds)
+  sweep_interval: 30
 
 # Monitoring thresholds for post-deploy anomaly detection
 monitoring:

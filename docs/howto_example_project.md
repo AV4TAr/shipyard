@@ -1,4 +1,4 @@
-# How To: Setting Up AI-CICD for a TODO App
+# How To: Setting Up Shipyard for a TODO App
 
 A walkthrough of setting up the AI-native CI/CD pipeline using a real example — a TODO application with CLI, web, and mobile interfaces.
 

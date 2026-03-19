@@ -11,13 +11,18 @@ so they can be plugged directly into :class:`ValidationGate`.  Each runner:
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 import subprocess
 import time
+from pathlib import Path
 from typing import Any
 
 from .models import Finding, Severity, SignalResult, ValidationSignal
 from .signals import ValidationSignalRunner
+
+logger = logging.getLogger(__name__)
 
 
 class RealStaticAnalysisRunner(ValidationSignalRunner):
@@ -365,3 +370,275 @@ class RealResourceBoundsRunner(ValidationSignalRunner):
             for _ in f:
                 count += 1
         return count
+
+
+class RealBehavioralDiffRunner(ValidationSignalRunner):
+    """Runs tests before and after a change and diffs the results.
+
+    When ``worktree_manager`` is provided and the sandbox result contains a
+    ``worktree_path``, the runner:
+
+    1. Runs pytest in the task worktree (the "after" state).
+    2. Derives the parent repo path and runs pytest there (the "before" state).
+    3. Diffs the two result sets to detect regressions, fixes, and test
+       additions/removals.
+
+    The signal **fails** if any test regressed (was passing before but fails
+    after the change).  All other transitions are informational.
+
+    When no worktree is available, falls back to simulated behaviour
+    (checking ``sandbox_result["behavioral_diffs"]``).
+    """
+
+    def __init__(
+        self,
+        *,
+        worktree_manager: Any | None = None,
+        test_command: str = "python3 -m pytest -v --tb=no",
+        timeout: int = 120,
+        force_pass: bool | None = None,
+    ) -> None:
+        self.worktree_manager = worktree_manager
+        self.test_command = test_command
+        self.timeout = timeout
+        self.force_pass = force_pass
+
+    def run(self, intent_id: str, sandbox_result: dict[str, Any]) -> SignalResult:
+        start = time.monotonic()
+
+        worktree_path = sandbox_result.get("worktree_path")
+
+        if worktree_path and self.worktree_manager is not None:
+            return self._run_real(intent_id, sandbox_result, worktree_path, start)
+        return self._run_simulated(intent_id, sandbox_result, start)
+
+    # ------------------------------------------------------------------
+    # Real worktree-based diff
+    # ------------------------------------------------------------------
+
+    def _run_real(
+        self,
+        intent_id: str,
+        sandbox_result: dict[str, Any],
+        worktree_path: str,
+        start: float,
+    ) -> SignalResult:
+        """Run actual before/after test comparison."""
+        repo_dir = self._derive_repo_dir(worktree_path)
+
+        # "After" — tests in the worktree (task branch)
+        after_raw = self.worktree_manager.run_tests(
+            worktree_path,
+            test_command=self.test_command,
+            timeout=self.timeout,
+        )
+        after_results = self._parse_pytest_results(after_raw.get("stdout", ""))
+
+        # "Before" — tests in the parent repo (main branch)
+        if repo_dir:
+            before_raw = self.worktree_manager.run_tests(
+                repo_dir,
+                test_command=self.test_command,
+                timeout=self.timeout,
+            )
+            before_results = self._parse_pytest_results(before_raw.get("stdout", ""))
+        else:
+            # Cannot determine before state — treat as all-new
+            before_results = {}
+
+        findings = self._diff_results(before_results, after_results)
+
+        has_regressions = any(
+            f.severity in (Severity.ERROR, Severity.CRITICAL) for f in findings
+        )
+
+        if self.force_pass is not None:
+            passed = self.force_pass
+        else:
+            passed = not has_regressions
+
+        # Confidence: high when we have both sides, lower if before was empty
+        if before_results:
+            confidence = 0.95 if passed else 0.85
+        else:
+            confidence = 0.70 if passed else 0.60
+
+        duration = time.monotonic() - start
+        return SignalResult(
+            signal=ValidationSignal.BEHAVIORAL_DIFF,
+            passed=passed,
+            confidence=confidence,
+            findings=findings,
+            duration_seconds=duration,
+        )
+
+    # ------------------------------------------------------------------
+    # Simulated fallback (same as the original BehavioralDiffRunner)
+    # ------------------------------------------------------------------
+
+    def _run_simulated(
+        self,
+        intent_id: str,
+        sandbox_result: dict[str, Any],
+        start: float,
+    ) -> SignalResult:
+        findings: list[Finding] = []
+
+        behavioural_diffs: list[dict[str, Any]] = sandbox_result.get(
+            "behavioral_diffs", []
+        )
+        for diff in behavioural_diffs:
+            findings.append(
+                Finding(
+                    severity=Severity(diff.get("severity", "warning")),
+                    title=diff.get("title", "Behavioural regression"),
+                    description=diff.get("description", ""),
+                    file_path=diff.get("file_path"),
+                    line_number=diff.get("line_number"),
+                    suggestion=diff.get("suggestion"),
+                )
+            )
+
+        has_critical = any(
+            f.severity in (Severity.ERROR, Severity.CRITICAL) for f in findings
+        )
+
+        if self.force_pass is not None:
+            passed = self.force_pass
+        else:
+            passed = not has_critical
+
+        confidence = 0.90 if passed else 0.80
+        duration = time.monotonic() - start
+
+        return SignalResult(
+            signal=ValidationSignal.BEHAVIORAL_DIFF,
+            passed=passed,
+            confidence=confidence,
+            findings=findings,
+            duration_seconds=duration,
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _derive_repo_dir(worktree_path: str) -> str | None:
+        """Derive the parent repo directory from a worktree path.
+
+        Worktree paths follow the pattern:
+            ``data/worktrees/<project_id>/<task_id>/``
+        The corresponding repo is at:
+            ``data/repos/<project_id>/``
+        """
+        wt = Path(worktree_path)
+        # Walk up looking for the worktrees directory
+        parts = wt.parts
+        for i, part in enumerate(parts):
+            if part == "worktrees" and i + 1 < len(parts):
+                project_id = parts[i + 1]
+                # Reconstruct repos path with same prefix
+                prefix = Path(*parts[:i]) if i > 0 else Path(".")
+                return str(prefix / "repos" / project_id)
+        return None
+
+    @staticmethod
+    def _parse_pytest_results(output: str) -> dict[str, str]:
+        """Parse pytest verbose output into ``{test_name: status}``.
+
+        Recognises lines like::
+
+            tests/test_auth.py::test_login PASSED
+            ../../../path/to/tests/test_auth.py::test_invalid FAILED
+
+        Test names are normalised to ``filename.py::test_name`` so that
+        results from different working directories can be compared.
+
+        Returns a dict mapping the normalised test path to ``"passed"``,
+        ``"failed"``, or ``"error"``.
+        """
+        results: dict[str, str] = {}
+        for line in output.splitlines():
+            line = line.strip()
+            match = re.match(
+                r"^(\S+::\S+)\s+(PASSED|FAILED|ERROR)\b",
+                line,
+            )
+            if match:
+                test_name = match.group(1)
+                status = match.group(2).lower()
+                # Normalise: strip leading path components, keep
+                # only filename::test_func (and any parameterised suffix)
+                # e.g. "../../../tests/test_auth.py::test_login" -> "test_auth.py::test_login"
+                parts = test_name.split("::", 1)
+                filename = Path(parts[0]).name  # just "test_auth.py"
+                normalised = "{}::{}".format(filename, parts[1]) if len(parts) > 1 else filename
+                results[normalised] = status
+        return results
+
+    @staticmethod
+    def _diff_results(
+        before: dict[str, str],
+        after: dict[str, str],
+    ) -> list[Finding]:
+        """Compare before/after test results and produce findings.
+
+        Categories:
+        - pass -> fail = ERROR (regression)
+        - fail -> pass = INFO (fix)
+        - new test (not in before) = INFO
+        - removed test (not in after) = WARNING
+        """
+        findings: list[Finding] = []
+        all_tests = set(before) | set(after)
+
+        for test in sorted(all_tests):
+            before_status = before.get(test)
+            after_status = after.get(test)
+
+            if before_status is None and after_status is not None:
+                # New test
+                findings.append(
+                    Finding(
+                        severity=Severity.INFO,
+                        title="New test added",
+                        description=f"{test} ({after_status})",
+                        file_path=test.split("::")[0] if "::" in test else None,
+                    )
+                )
+            elif after_status is None and before_status is not None:
+                # Removed test
+                findings.append(
+                    Finding(
+                        severity=Severity.WARNING,
+                        title="Test removed",
+                        description=f"{test} was {before_status} before removal",
+                        file_path=test.split("::")[0] if "::" in test else None,
+                    )
+                )
+            elif before_status == "passed" and after_status in ("failed", "error"):
+                # Regression
+                findings.append(
+                    Finding(
+                        severity=Severity.ERROR,
+                        title="Test regression",
+                        description=(
+                            f"{test} was passing but now {after_status}"
+                        ),
+                        file_path=test.split("::")[0] if "::" in test else None,
+                        suggestion="fix_regression",
+                    )
+                )
+            elif before_status in ("failed", "error") and after_status == "passed":
+                # Fix
+                findings.append(
+                    Finding(
+                        severity=Severity.INFO,
+                        title="Test fixed",
+                        description=f"{test} was {before_status}, now passing",
+                        file_path=test.split("::")[0] if "::" in test else None,
+                    )
+                )
+
+        return findings

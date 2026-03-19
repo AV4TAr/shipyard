@@ -10,6 +10,7 @@ from src.storage.repositories import (
     GoalRepository,
     IntentRepository,
     PipelineRunRepository,
+    ProjectRepository,
     TaskRepository,
 )
 
@@ -24,6 +25,7 @@ class StorageBackend:
     agent_profiles: AgentProfileRepository
     intents: IntentRepository
     agent_registrations: AgentRegistrationRepository | None = None
+    projects: ProjectRepository | None = None
 
 
 def create_storage(
@@ -34,7 +36,7 @@ def create_storage(
     Args:
         backend: Either ``"memory"`` or ``"sqlite"``.
         db_path: Path for the SQLite database file.  Only used when
-            ``backend="sqlite"``.  Defaults to ``"data/ai-cicd.db"``.
+            ``backend="sqlite"``.  Defaults to ``"data/shipyard.db"``.
 
     Returns:
         A :class:`StorageBackend` with all repositories initialised.
@@ -49,6 +51,7 @@ def create_storage(
             MemoryGoalRepository,
             MemoryIntentRepository,
             MemoryPipelineRunRepository,
+            MemoryProjectRepository,
             MemoryTaskRepository,
         )
 
@@ -59,6 +62,7 @@ def create_storage(
             agent_profiles=MemoryAgentProfileRepository(),
             intents=MemoryIntentRepository(),
             agent_registrations=MemoryAgentRegistrationRepository(),
+            projects=MemoryProjectRepository(),
         )
 
     if backend == "sqlite":
@@ -68,10 +72,11 @@ def create_storage(
             SqliteGoalRepository,
             SqliteIntentRepository,
             SqlitePipelineRunRepository,
+            SqliteProjectRepository,
             SqliteTaskRepository,
         )
 
-        path = db_path or "data/ai-cicd.db"
+        path = db_path or "data/shipyard.db"
         return StorageBackend(
             goals=SqliteGoalRepository(path),
             tasks=SqliteTaskRepository(path),
@@ -79,6 +84,7 @@ def create_storage(
             agent_profiles=SqliteAgentProfileRepository(path),
             intents=SqliteIntentRepository(path),
             agent_registrations=SqliteAgentRegistrationRepository(path),
+            projects=SqliteProjectRepository(path),
         )
 
     raise ValueError(f"Unknown storage backend: {backend!r}. Use 'memory' or 'sqlite'.")

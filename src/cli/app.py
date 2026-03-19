@@ -33,7 +33,7 @@ from .runtime import CLIRuntime
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the top-level argument parser."""
     parser = argparse.ArgumentParser(
-        prog="ai-cicd",
+        prog="shipyard",
         description="AI-native CI/CD system — Human CLI",
     )
     parser.add_argument(
@@ -246,7 +246,7 @@ def _handle_goal(runtime: CLIRuntime, args: argparse.Namespace) -> int:
         print(f"Goal cancelled: {goal.goal_id}")
         return 0
 
-    print("Usage: ai-cicd goal {create,list,activate,show,cancel}", file=sys.stderr)
+    print("Usage: shipyard goal {create,list,activate,show,cancel}", file=sys.stderr)
     return 1
 
 
@@ -303,7 +303,7 @@ def _handle_project(runtime: CLIRuntime, args: argparse.Namespace) -> int:
         return 0
 
     print(
-        "Usage: ai-cicd project {create,list,show,activate}",
+        "Usage: shipyard project {create,list,show,activate}",
         file=sys.stderr,
     )
     return 1
@@ -466,7 +466,7 @@ def _handle_queue(runtime: CLIRuntime, _args: argparse.Namespace) -> int:
 def _handle_constraints(runtime: CLIRuntime, args: argparse.Namespace) -> int:
     if args.constraints_action == "show":
         print("Constraints display requires a loaded constraint set.")
-        print("Use: ai-cicd constraints check <file> to check a specific file.")
+        print("Use: shipyard constraints check <file> to check a specific file.")
         return 0
 
     if args.constraints_action == "check":
@@ -475,7 +475,7 @@ def _handle_constraints(runtime: CLIRuntime, args: argparse.Namespace) -> int:
         print("Configure constraints via --config or place a constraints.yaml in configs/.")
         return 0
 
-    print("Usage: ai-cicd constraints {show,check}", file=sys.stderr)
+    print("Usage: shipyard constraints {show,check}", file=sys.stderr)
     return 1
 
 

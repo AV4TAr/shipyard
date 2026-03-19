@@ -13,6 +13,7 @@ from .models import (
     ValidationVerdict,
 )
 from .real_runners import (
+    RealBehavioralDiffRunner,
     RealResourceBoundsRunner,
     RealSecurityScanRunner,
     RealStaticAnalysisRunner,
@@ -30,6 +31,7 @@ __all__ = [
     "BehavioralDiffRunner",
     "Finding",
     "IntentAlignmentRunner",
+    "RealBehavioralDiffRunner",
     "RealResourceBoundsRunner",
     "RealSecurityScanRunner",
     "RealStaticAnalysisRunner",

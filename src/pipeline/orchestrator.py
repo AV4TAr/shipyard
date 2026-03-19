@@ -65,6 +65,7 @@ class PipelineOrchestrator:
         config: PipelineConfig | None = None,
         run_repo: PipelineRunRepository | None = None,
         event_dispatcher: Any | None = None,
+        worktree_manager: Any | None = None,
     ) -> None:
         self.intent_registry = intent_registry
         self.sandbox_manager = sandbox_manager
@@ -76,6 +77,7 @@ class PipelineOrchestrator:
         self.config = config or PipelineConfig()
         self._run_repo = run_repo
         self._event_dispatcher = event_dispatcher
+        self._worktree_manager = worktree_manager
 
         self._runs: dict[uuid.UUID, PipelineRun] = {}
 
@@ -116,6 +118,11 @@ class PipelineOrchestrator:
             agent_id=agent_id,
             status=PipelineStatus.IN_PROGRESS,
         )
+        # Store intent info so the UI can show what the agent submitted
+        pipeline_run.metadata["intent_description"] = intent_declaration.description
+        pipeline_run.metadata["intent_files"] = list(intent_declaration.target_files)
+        if intent_declaration.metadata:
+            pipeline_run.metadata.update(intent_declaration.metadata)
         self._save_run(pipeline_run)
         self._dispatch("pipeline.started", {
             "run_id": str(pipeline_run.run_id),
@@ -253,8 +260,80 @@ class PipelineOrchestrator:
     def _run_sandbox_stage(
         self, intent: IntentDeclaration, pipeline_run: PipelineRun
     ) -> StageResult:
-        """Stage 2: Create sandbox and run tests."""
+        """Stage 2: Create sandbox and run tests.
+
+        If ``pipeline_run.metadata`` contains a ``worktree_path`` key and a
+        worktree manager is configured, real tests are executed inside the
+        git worktree.  Otherwise, the existing simulated sandbox is used.
+        """
         start = time.monotonic()
+
+        # --- Real worktree-based testing path ---
+        worktree_path = pipeline_run.metadata.get("worktree_path")
+        if worktree_path and self._worktree_manager is not None:
+            try:
+                test_command = pipeline_run.metadata.get("test_command", "pytest")
+                result = self._worktree_manager.run_tests(
+                    worktree_path, test_command=test_command
+                )
+                elapsed = time.monotonic() - start
+
+                sandbox_output: dict[str, Any] = {
+                    "sandbox_id": f"worktree:{worktree_path}",
+                    "status": "succeeded" if result["passed"] else "failed",
+                    "logs": result.get("stdout", "") + result.get("stderr", ""),
+                    "duration_seconds": elapsed,
+                    "worktree": True,
+                    "returncode": result["returncode"],
+                    "path": worktree_path,
+                    "worktree_path": worktree_path,
+                }
+                if result["passed"]:
+                    sandbox_output["test_results"] = {
+                        "total": 1,
+                        "passed": 1,
+                        "failed": 0,
+                        "skipped": 0,
+                        "failures": [],
+                    }
+                else:
+                    sandbox_output["test_results"] = {
+                        "total": 1,
+                        "passed": 0,
+                        "failed": 1,
+                        "skipped": 0,
+                        "failures": [
+                            {
+                                "test_name": "worktree_tests",
+                                "message": result.get("stderr", "Tests failed"),
+                                "structured_error": None,
+                            }
+                        ],
+                    }
+                pipeline_run.metadata["sandbox_result"] = sandbox_output
+
+                status = PipelineStatus.PASSED if result["passed"] else PipelineStatus.FAILED
+                error = None if result["passed"] else f"Worktree tests failed (exit {result['returncode']})"
+
+                return StageResult(
+                    stage=PipelineStage.SANDBOX,
+                    status=status,
+                    duration_seconds=elapsed,
+                    output=sandbox_output,
+                    error=error,
+                )
+            except Exception as exc:
+                elapsed = time.monotonic() - start
+                logger.exception("Worktree sandbox stage failed unexpectedly")
+                return StageResult(
+                    stage=PipelineStage.SANDBOX,
+                    status=PipelineStatus.FAILED,
+                    duration_seconds=elapsed,
+                    output={},
+                    error=f"Unexpected error in worktree sandbox stage: {exc}",
+                )
+
+        # --- Simulated sandbox path (existing behaviour) ---
         try:
             config = SandboxConfig(
                 intent_id=intent.intent_id,
@@ -480,12 +559,16 @@ class PipelineOrchestrator:
                     "Change auto-deployed (low risk, sufficient trust)."
                 )
                 status = PipelineStatus.PASSED
+                # Commit worktree changes on auto-deploy
+                self._try_worktree_commit(intent, pipeline_run, deploy_output)
             elif route == DeployRoute.AGENT_REVIEW.value:
                 deploy_output["action"] = "queued_for_agent_review"
                 deploy_output["message"] = (
                     "Change queued for supervisor agent review before deploy."
                 )
                 status = PipelineStatus.PASSED
+                # Commit worktree changes on agent-review (passed)
+                self._try_worktree_commit(intent, pipeline_run, deploy_output)
             elif route == DeployRoute.HUMAN_APPROVAL.value:
                 deploy_output["action"] = "queued_for_human_approval"
                 deploy_output["message"] = (
@@ -519,6 +602,32 @@ class PipelineOrchestrator:
                 duration_seconds=elapsed,
                 output={},
                 error=f"Unexpected error in deploy stage: {exc}",
+            )
+
+    # ------------------------------------------------------------------
+    # Worktree helpers
+    # ------------------------------------------------------------------
+
+    def _try_worktree_commit(
+        self,
+        intent: IntentDeclaration,
+        pipeline_run: PipelineRun,
+        deploy_output: dict[str, Any],
+    ) -> None:
+        """Commit worktree changes if worktree metadata is present."""
+        worktree_path = pipeline_run.metadata.get("worktree_path")
+        branch_name = pipeline_run.metadata.get("branch_name")
+        if not (worktree_path and branch_name and self._worktree_manager):
+            return
+        try:
+            commit_hash = self._worktree_manager.commit(
+                worktree_path, f"Deploy: {intent.description}"
+            )
+            deploy_output["worktree_committed"] = True
+            deploy_output["commit_hash"] = commit_hash
+        except Exception:
+            logger.warning(
+                "Failed to commit worktree changes at %s", worktree_path, exc_info=True
             )
 
     # ------------------------------------------------------------------

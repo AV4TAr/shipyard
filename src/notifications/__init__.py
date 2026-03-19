@@ -1,4 +1,4 @@
-"""Webhook notification system for AI-CICD pipeline events."""
+"""Webhook notification system for Shipyard pipeline events."""
 
 from .channels import format_slack_message, send_slack, send_webhook
 from .dispatcher import EventDispatcher

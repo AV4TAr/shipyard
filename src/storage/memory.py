@@ -123,3 +123,26 @@ class MemoryAgentRegistrationRepository:
 
     def delete(self, agent_id: str) -> None:
         self._store.pop(agent_id, None)
+
+
+class MemoryProjectRepository:
+    """In-memory Project repository backed by a dict."""
+
+    def __init__(self) -> None:
+        from src.projects.models import Project
+        self._store: dict[uuid.UUID, Project] = {}
+
+    def save(self, project: object) -> None:
+        self._store[project.project_id] = project  # type: ignore[attr-defined]
+
+    def get(self, project_id: uuid.UUID) -> object | None:
+        return self._store.get(project_id)
+
+    def list_all(self, status: str | None = None) -> list:
+        results = list(self._store.values())
+        if status is not None:
+            results = [p for p in results if p.status.value == status]
+        return results
+
+    def delete(self, project_id: uuid.UUID) -> None:
+        self._store.pop(project_id, None)

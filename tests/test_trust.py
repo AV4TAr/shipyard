@@ -78,9 +78,9 @@ def _make_experienced_profile() -> AgentProfile:
 
 
 class TestAgentProfile:
-    def test_new_agent_has_low_trust(self) -> None:
+    def test_new_agent_has_baseline_trust(self) -> None:
         profile = AgentProfile(agent_id="new")
-        assert profile.trust_score == 0.1
+        assert profile.trust_score == 0.5
         assert profile.success_rate == 0.0
 
     def test_experienced_agent_has_high_trust(self) -> None:
@@ -148,7 +148,8 @@ class TestRiskScorer:
             target_files=["db/migrations/001_add_table.sql"],
             target_services=["db", "api", "worker"],
         )
-        verdict = _make_verdict(passed=True, confidence=0.6)
+        # Failing validation + new agent → high risk even with baseline trust
+        verdict = _make_verdict(passed=False, confidence=0.3)
         assessment = self.scorer.assess(intent, verdict, self.new_profile)
         assert assessment.risk_level in (RiskLevel.HIGH, RiskLevel.CRITICAL)
         assert assessment.risk_score >= 0.6
@@ -266,7 +267,7 @@ class TestTrustTracker:
         profile = self.tracker.get_profile("agent-x")
         assert profile.agent_id == "agent-x"
         assert profile.total_deployments == 0
-        assert profile.trust_score == 0.1
+        assert profile.trust_score == 0.5
 
     def test_record_successful_deployment(self) -> None:
         self.tracker.record_outcome("agent-x", success=True, risk_score=0.3)

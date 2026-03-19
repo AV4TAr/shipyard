@@ -1,4 +1,4 @@
-"""Client-side SDK that agents use to interact with the AI-CICD system.
+"""Client-side SDK that agents use to interact with the Shipyard system.
 
 Uses only stdlib (``urllib.request``) — no external HTTP dependencies.
 """
@@ -29,7 +29,7 @@ class SDKError(Exception):
 
 
 class AgentClient:
-    """SDK for AI agents to interact with the AI-CICD system.
+    """SDK for AI agents to interact with the Shipyard system.
 
     Usage::
 

@@ -1,4 +1,4 @@
-"""FastAPI backend for the AI-CICD Command Center."""
+"""FastAPI backend for the Shipyard Command Center."""
 
 from .app import create_app
 

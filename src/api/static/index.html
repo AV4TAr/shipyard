@@ -741,6 +741,60 @@ main {
 .agent-status-dot.available { background: var(--green); }
 .agent-status-dot.busy { background: var(--amber); }
 .agent-status-dot.offline { background: var(--gray); }
+
+/* Phase badges */
+.phase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.phase-badge.phase-idle { background: rgba(148,163,184,0.15); color: var(--text-muted); }
+.phase-badge.phase-claiming { background: rgba(59,130,246,0.15); color: var(--blue); }
+.phase-badge.phase-calling_llm { background: rgba(168,85,247,0.15); color: #a855f7; }
+.phase-badge.phase-writing_files { background: rgba(59,130,246,0.15); color: var(--blue); }
+.phase-badge.phase-running_tests { background: rgba(245,158,11,0.15); color: var(--amber); }
+.phase-badge.phase-submitting { background: rgba(34,197,94,0.15); color: var(--green); }
+.phase-badge.phase-waiting { background: rgba(148,163,184,0.15); color: var(--text-muted); }
+
+/* Agent status panel */
+.agent-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+.agent-live-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  transition: border-color 0.2s;
+}
+.agent-live-card.active { border-color: var(--blue); }
+.agent-live-card .agent-phase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+}
+.agent-live-card .agent-task-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lease-countdown {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
 .capability-badges {
   display: flex;
   flex-wrap: wrap;
@@ -823,12 +877,14 @@ main {
 }
 .risk-factor {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   padding: 0.4rem 0.75rem;
   background: var(--bg-primary);
   border-radius: var(--radius-sm);
   font-size: 0.8rem;
+  gap: 0.2rem;
 }
 .risk-factor-label { color: var(--text-secondary); }
 .risk-factor-value { font-family: var(--font-mono); font-weight: 600; }
@@ -847,9 +903,328 @@ main {
   font-size: 0.75rem;
 }
 
+/* ===== Config Editor ===== */
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.config-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.config-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 0.45rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  transition: border-color var(--transition);
+}
+.config-input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+.config-input-sm {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.8rem;
+}
+.config-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+}
+.config-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--blue);
+  cursor: pointer;
+  border: 2px solid var(--bg-primary);
+}
+.config-slider::-moz-range-thumb {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--blue);
+  cursor: pointer;
+  border: 2px solid var(--bg-primary);
+}
+.config-toggle {
+  position: relative;
+  display: inline-block;
+  width: 40px; height: 22px;
+  cursor: pointer;
+}
+.config-toggle input { opacity: 0; width: 0; height: 0; }
+.config-toggle-track {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--border);
+  border-radius: 11px;
+  transition: background var(--transition);
+}
+.config-toggle-track::after {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  left: 3px; top: 3px;
+  background: var(--text-primary);
+  border-radius: 50%;
+  transition: transform var(--transition);
+}
+.config-toggle input:checked + .config-toggle-track {
+  background: var(--green);
+}
+.config-toggle input:checked + .config-toggle-track::after {
+  transform: translateX(18px);
+}
+
 @media (max-width: 768px) {
   .project-grid { grid-template-columns: 1fr; }
   .risk-factors { grid-template-columns: 1fr; }
+  .config-grid { grid-template-columns: 1fr; }
+}
+
+/* ===== Activity Tab — Mission Control ===== */
+.activity-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.activity-live-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: livePulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes livePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+}
+.activity-live-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--red);
+}
+.activity-event-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-left: auto;
+  font-family: var(--font-mono);
+}
+
+/* System pulse — heartbeat monitor bar */
+.system-pulse {
+  height: 40px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+.system-pulse canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Agent swimlanes */
+.agent-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.agent-lane {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 1rem;
+  transition: border-color var(--transition);
+}
+.agent-lane:hover { border-color: var(--text-muted); }
+.agent-lane-avatar {
+  width: 32px; height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+.agent-lane-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  min-width: 100px;
+}
+.agent-lane-pipeline {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.lane-stage {
+  flex: 1;
+  height: 24px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: all 0.3s ease;
+}
+.lane-stage.idle { background: var(--gray-dim); color: var(--gray); }
+.lane-stage.active { background: var(--blue-dim); color: var(--blue); animation: stagePulse 1.5s ease-in-out infinite; }
+.lane-stage.done { background: var(--green-dim); color: var(--green); }
+.lane-stage.fail { background: var(--red-dim); color: var(--red); }
+@keyframes stagePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.agent-lane-status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+.agent-lane-status.working { background: var(--green-dim); color: var(--green); }
+.agent-lane-status.idle { background: var(--gray-dim); color: var(--gray); }
+.agent-lane-status.waiting { background: var(--amber-dim); color: var(--amber); }
+.agent-lane-status.error { background: var(--red-dim); color: var(--red); }
+
+/* Event stream cards */
+.event-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+.event-stream::-webkit-scrollbar { width: 4px; }
+.event-stream::-webkit-scrollbar-track { background: transparent; }
+.event-stream::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.event-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius);
+  animation: eventSlideIn 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color var(--transition), background var(--transition);
+}
+.event-card:hover { background: var(--bg-hover); }
+.event-card.event-success { border-left-color: var(--green); }
+.event-card.event-failure { border-left-color: var(--red); }
+.event-card.event-warning { border-left-color: var(--amber); }
+.event-card.event-info { border-left-color: var(--blue); }
+.event-card.event-new { border-left-color: var(--purple); }
+
+@keyframes eventSlideIn {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.event-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.event-icon.green { background: var(--green-dim); color: var(--green); }
+.event-icon.red { background: var(--red-dim); color: var(--red); }
+.event-icon.amber { background: var(--amber-dim); color: var(--amber); }
+.event-icon.blue { background: var(--blue-dim); color: var(--blue); }
+.event-icon.purple { background: var(--purple-dim); color: var(--purple); }
+
+.event-body { flex: 1; min-width: 0; }
+.event-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  margin-bottom: 0.15rem;
+}
+.event-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+.event-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.event-meta .mono { font-size: 0.7rem; }
+.event-timestamp {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* Activity filter pills */
+.activity-filters {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.filter-pill {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  font-family: var(--font-sans);
+}
+.filter-pill:hover { border-color: var(--text-muted); color: var(--text-primary); }
+.filter-pill.active { background: var(--blue-dim); border-color: var(--blue); color: var(--blue); }
+
+@media (max-width: 768px) {
+  .agent-lane-name { min-width: 60px; font-size: 0.75rem; }
+  .lane-stage { font-size: 0.5rem; }
+  .agent-lanes { gap: 0.35rem; }
 }
 </style>
 </head>
@@ -870,12 +1245,14 @@ main {
   </div>
   <nav id="main-nav">
     <button data-page="dashboard" class="active">Dashboard</button>
+    <button data-page="activity">Activity</button>
     <button data-page="goals">Goals</button>
     <button data-page="pipeline">Pipeline</button>
     <button data-page="agents">Agents</button>
     <button data-page="queue">Queue</button>
     <button data-page="constraints">Constraints</button>
     <button data-page="projects">Projects</button>
+    <button data-page="config">Config</button>
   </nav>
   <div class="header-status">
     <div class="status-dot" id="connection-dot"></div>
@@ -888,7 +1265,7 @@ main {
 
 <!-- ===== Footer ===== -->
 <footer class="app-footer">
-  <span>Shipyard AI-CICD &mdash; Autonomous Pipeline Management</span>
+  <span>Shipyard &mdash; Autonomous Pipeline Management</span>
   <span>558 tests passing</span>
 </footer>
 
@@ -933,26 +1310,78 @@ const api = {
       throw e;
     }
   },
+  async patch(path, body = {}) {
+    try {
+      const r = await fetch(`/api${path}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || r.statusText);
+      }
+      return r.json();
+    } catch (e) {
+      if (e.message === 'Failed to fetch') throw new Error('Connection lost');
+      throw e;
+    }
+  },
+  async del(path) {
+    try {
+      const r = await fetch(`/api${path}`, { method: 'DELETE' });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || r.statusText);
+      }
+      return r.json();
+    } catch (e) {
+      if (e.message === 'Failed to fetch') throw new Error('Connection lost');
+      throw e;
+    }
+  },
+  async put(path, body = {}) {
+    try {
+      const r = await fetch(`/api${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ detail: r.statusText }));
+        throw new Error(err.detail || r.statusText);
+      }
+      return r.json();
+    } catch (e) {
+      if (e.message === 'Failed to fetch') throw new Error('Connection lost');
+      throw e;
+    }
+  },
 };
 
 // ===== State =====
 let currentPage = 'dashboard';
+let currentProjectFilter = null; // project ID to filter goals by
 let refreshInterval = null;
 let wsConnection = null;
 
 // ===== Router =====
 const pages = {
   dashboard: renderDashboard,
+  activity: renderActivity,
   goals: renderGoals,
   pipeline: renderPipeline,
   agents: renderAgents,
   queue: renderQueue,
   constraints: renderConstraints,
   projects: renderProjects,
+  config: renderConfig,
 };
 
-function navigate(page) {
+function navigate(page, {updateHash = true} = {}) {
+  if (!pages[page]) page = 'dashboard';
   currentPage = page;
+  if (updateHash) location.hash = '#/' + page;
   document.querySelectorAll('#main-nav button').forEach(b => {
     b.classList.toggle('active', b.dataset.page === page);
   });
@@ -965,11 +1394,18 @@ document.querySelectorAll('#main-nav button').forEach(btn => {
   btn.addEventListener('click', () => navigate(btn.dataset.page));
 });
 
+// Hash-based routing — restore tab on load & browser back/forward
+window.addEventListener('hashchange', () => {
+  const page = location.hash.replace(/^#\/?/, '') || 'dashboard';
+  if (page !== currentPage && pages[page]) navigate(page, {updateHash: false});
+});
+
 // ===== Auto-refresh =====
 function startAutoRefresh() {
   if (refreshInterval) clearInterval(refreshInterval);
   refreshInterval = setInterval(() => {
     if (currentPage === 'dashboard') renderDashboard();
+    if (currentPage === 'activity') updateActivityTimestamps();
   }, 5000);
 }
 
@@ -985,7 +1421,9 @@ function toast(message, type = 'info') {
 
 // ===== Modal =====
 function showModal(html) {
-  document.getElementById('modal-content').innerHTML = html;
+  if (html !== undefined) {
+    document.getElementById('modal-content').innerHTML = html;
+  }
   document.getElementById('modal-overlay').classList.add('active');
 }
 
@@ -1081,9 +1519,30 @@ async function renderDashboard() {
   const health = healthColor(data);
   const healthLabel = health === 'green' ? 'Healthy' : health === 'amber' ? 'Attention' : 'Critical';
 
+  // Fetch freeze state
+  let isFrozen = false;
+  try {
+    const freezeData = await api.get('/pipeline/freeze');
+    isFrozen = freezeData.frozen === true;
+  } catch (e) { /* ignore */ }
+
+  const freezeBannerHtml = isFrozen ? `
+    <div id="freeze-banner" style="background:var(--red);color:#fff;padding:0.75rem 1rem;text-align:center;font-weight:600;border-radius:var(--radius);margin-bottom:1rem;font-size:0.95rem;letter-spacing:0.5px">
+      &#9888; PIPELINE FROZEN — All new claims and submissions are blocked
+    </div>
+  ` : '';
+
+  const freezeBtnLabel = isFrozen ? 'PIPELINE FROZEN' : 'FREEZE PIPELINE';
+  const freezeBtnColor = isFrozen ? 'background:var(--green);color:#fff' : 'background:var(--red);color:#fff';
+  const freezeBtnAction = isFrozen ? 'unfreezeClick' : 'freezeClick';
+
   app.innerHTML = `
-    <div class="section-header">
+    ${freezeBannerHtml}
+    <div class="section-header" style="display:flex;align-items:center;justify-content:space-between">
       <h1 class="section-title">Dashboard</h1>
+      <button id="freeze-btn" onclick="${freezeBtnAction}()"
+        style="${freezeBtnColor};border:none;padding:0.5rem 1.25rem;border-radius:var(--radius);font-weight:700;cursor:pointer;font-size:0.85rem;letter-spacing:0.5px;transition:opacity var(--transition)"
+        onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">${escapeHtml(freezeBtnLabel)}</button>
     </div>
     <div class="metrics-grid">
       <div class="metric-card ${data.active_goals > 0 ? 'green' : 'blue'}">
@@ -1118,6 +1577,16 @@ async function renderDashboard() {
       </div>
     </div>
 
+    <div class="card" id="agent-status-panel">
+      <div class="card-header">
+        <span class="card-title">Agent Activity</span>
+        <span style="font-size:0.75rem;color:var(--text-muted)">Live</span>
+      </div>
+      <div class="card-body" id="agent-status-body">
+        <div class="loading-state"><div class="spinner"></div><span>Loading agent status...</span></div>
+      </div>
+    </div>
+
     <div class="card">
       <div class="card-header">
         <span class="card-title">Recent Activity</span>
@@ -1127,6 +1596,9 @@ async function renderDashboard() {
       </div>
     </div>
   `;
+
+  // Load agent statuses
+  loadAgentStatusPanel();
 
   // Load recent pipeline runs for the activity feed
   try {
@@ -1161,11 +1633,19 @@ async function renderDashboard() {
 
 // ===== Goals =====
 async function renderGoals() {
+  const filterHtml = currentProjectFilter
+    ? `<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem">
+        <span style="color:var(--text-muted);font-size:0.85rem">Filtered by project</span>
+        <span class="badge badge-blue" id="project-filter-name">...</span>
+        <button class="btn btn-sm btn-ghost" onclick="currentProjectFilter=null;navigate('goals')">Show All</button>
+       </div>`
+    : '';
   app.innerHTML = `
     <div class="section-header">
       <h1 class="section-title">Goals</h1>
       <button class="btn btn-primary" onclick="showNewGoalModal()">+ New Goal</button>
     </div>
+    ${filterHtml}
     <div class="card">
       <div class="card-body" id="goals-body" style="padding:0">
         <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading...</span></div>
@@ -1178,7 +1658,23 @@ async function renderGoals() {
 async function loadGoalsTable() {
   const body = document.getElementById('goals-body');
   try {
-    const goals = await api.get('/goals');
+    const [goals, goalMap] = await Promise.all([
+      currentProjectFilter
+        ? api.get(`/projects/${currentProjectFilter}/goals`)
+        : api.get('/goals'),
+      currentProjectFilter ? Promise.resolve({}) : api.get('/projects/goal-map').catch(() => ({})),
+    ]);
+    // Sort newest first
+    goals.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    // Update filter label with project name if filtering
+    if (currentProjectFilter) {
+      try {
+        const proj = await api.get(`/projects/${currentProjectFilter}`);
+        const label = document.getElementById('project-filter-name');
+        if (label) label.textContent = proj.title || proj.name || currentProjectFilter.substring(0,8);
+      } catch(e) {}
+    }
+    const showProjectCol = !currentProjectFilter;
     if (!goals || goals.length === 0) {
       body.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9673;</div><div class="empty-state-text">No goals yet. Create one to get started.</div></div>';
       return;
@@ -1186,12 +1682,21 @@ async function loadGoalsTable() {
     body.innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>Title</th><th>Status</th><th>Priority</th><th>Created</th><th>Actions</th>
+          <th>Title</th>${showProjectCol ? '<th>Project</th>' : ''}<th>Status</th><th>Priority</th><th>Created</th><th>Actions</th>
         </tr></thead>
         <tbody>
-          ${goals.map(g => `
+          ${goals.map(g => {
+            const pm = goalMap[g.goal_id];
+            const projectCell = showProjectCol
+              ? `<td>${pm
+                  ? `<a href="#" onclick="event.stopPropagation();currentProjectFilter='${escapeHtml(pm.project_id)}';navigate('goals');return false" style="color:var(--blue);text-decoration:none;font-size:0.85rem">${escapeHtml(pm.project_title)}</a><br><span style="color:var(--text-muted);font-size:0.75rem">${escapeHtml(pm.milestone_title)}</span>`
+                  : '<span style="color:var(--text-muted);font-size:0.8rem">No project</span>'
+                }</td>`
+              : '';
+            return `
             <tr class="expandable" data-goal-id="${g.goal_id}">
               <td><strong>${escapeHtml(g.title)}</strong><br><span style="color:var(--text-muted);font-size:0.8rem">${escapeHtml(g.description || '').substring(0, 80)}</span></td>
+              ${projectCell}
               <td>${statusBadge(g.status)}</td>
               <td>${priorityBadge(g.priority)}</td>
               <td class="truncate-id">${formatDate(g.created_at)}</td>
@@ -1203,11 +1708,11 @@ async function loadGoalsTable() {
               </td>
             </tr>
             <tr class="expand-row" id="goal-detail-${g.goal_id}">
-              <td colspan="5">
+              <td colspan="${showProjectCol ? 6 : 5}">
                 <div class="expand-content" id="goal-tasks-${g.goal_id}">Loading tasks...</div>
               </td>
             </tr>
-          `).join('')}
+          `}).join('')}
         </tbody>
       </table>
     `;
@@ -1245,11 +1750,14 @@ async function loadGoalTasks(goalId) {
       <table class="data-table" style="margin:-1rem">
         <thead><tr><th>Task</th><th>Status</th><th>Type</th><th>Agent</th><th>Actions</th></tr></thead>
         <tbody>${tasks.map(t => {
+          _taskCache[t.task_id] = t;
           const agentId = t.assigned_agent || t.agent_id || null;
           const matchScore = t.match_score ?? t.routing_score ?? null;
           const matchReasons = t.match_reasons || t.routing_reasons || [];
+          const taskStatus = (t.status || '').toLowerCase();
+          const canRoute = !agentId && (taskStatus === 'pending' || taskStatus === 'ready');
           return `
-          <tr>
+          <tr style="cursor:pointer" onclick="showTaskDetail('${t.task_id}')">
             <td><span class="mono">${truncateId(t.task_id)}</span> ${escapeHtml(t.title || t.description || '')}</td>
             <td>${statusBadge(t.status)}</td>
             <td><span style="color:var(--text-muted)">${escapeHtml(t.task_type || '---')}</span></td>
@@ -1263,7 +1771,7 @@ async function loadGoalTasks(goalId) {
               ` : '<span style="color:var(--text-muted)">unassigned</span>'}
             </td>
             <td>
-              ${!agentId && (t.status === 'pending' || t.status === 'ready') ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();routeTask('${t.task_id}','${goalId}')">Route</button>` : ''}
+              ${canRoute ? `<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();routeTask('${t.task_id}','${goalId}')">Route</button>` : ''}
             </td>
           </tr>`;
         }).join('')}</tbody>
@@ -1284,7 +1792,128 @@ async function routeTask(taskId, goalId) {
   }
 }
 
-function showNewGoalModal() {
+const _taskCache = {};
+function showTaskDetail(taskOrId) {
+  const task = typeof taskOrId === 'string' ? _taskCache[taskOrId] : taskOrId;
+  if (!task) return;
+  const agentId = task.assigned_agent || task.agent_id || null;
+  const matchScore = task.match_score ?? task.routing_score ?? null;
+  const matchReasons = task.match_reasons || task.routing_reasons || [];
+  const deps = task.depends_on || [];
+  const constraints = task.constraints || [];
+  const files = task.target_files || [];
+  const taskStatus = (task.status || 'unknown').toLowerCase();
+
+  const modalEl = document.getElementById('modal-content');
+  modalEl.textContent = '';
+
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const titleSpan = document.createElement('span');
+  titleSpan.className = 'modal-title';
+  titleSpan.textContent = 'Task Details';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'modal-close';
+  closeBtn.textContent = '\u00D7';
+  closeBtn.onclick = closeModal;
+  header.appendChild(titleSpan);
+  header.appendChild(closeBtn);
+  modalEl.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+
+  // Build detail rows safely
+  const rows = [];
+  rows.push({label: 'Title', value: task.title || task.description || '---'});
+  rows.push({label: 'Task ID', value: task.task_id || '---', mono: true});
+  rows.push({label: 'Status', html: statusBadge(task.status)});
+  rows.push({label: 'Risk', value: task.estimated_risk || '---'});
+
+  if (agentId) {
+    let agentHtml = '<span class="mono">' + escapeHtml(agentId) + '</span>';
+    if (matchScore !== null) {
+      agentHtml += ' <span class="badge badge-blue">' + (matchScore * 100).toFixed(0) + '% match</span>';
+    }
+    rows.push({label: 'Assigned Agent', html: agentHtml});
+  } else {
+    rows.push({label: 'Assigned Agent', value: 'Unassigned'});
+  }
+
+  if (matchReasons.length > 0) {
+    const reasonsHtml = matchReasons.map(function(r) {
+      return '<span class="badge badge-gray" style="font-size:0.7rem;margin-right:0.25rem">' + escapeHtml(r) + '</span>';
+    }).join('');
+    rows.push({label: 'Match Reasons', html: reasonsHtml});
+  }
+
+  if (task.description && task.title !== task.description) {
+    rows.push({label: 'Description', value: task.description});
+  }
+
+  if (files.length > 0) {
+    const filesHtml = files.map(function(f) {
+      return '<span style="font-family:var(--font-mono);font-size:0.8rem;background:var(--bg-primary);padding:0.1rem 0.4rem;border-radius:3px;margin-right:0.25rem">' + escapeHtml(f) + '</span>';
+    }).join('');
+    rows.push({label: 'Target Files', html: filesHtml});
+  }
+
+  if (constraints.length > 0) {
+    rows.push({label: 'Constraints', value: constraints.join(', ')});
+  }
+
+  if (deps.length > 0) {
+    const depsHtml = deps.map(function(d) {
+      return '<span class="mono" style="font-size:0.8rem">' + escapeHtml(String(d).substring(0, 8)) + '</span>';
+    }).join(', ');
+    rows.push({label: 'Depends On', html: depsHtml});
+  }
+
+  let tableHtml = '<table style="width:100%;border-collapse:collapse">';
+  rows.forEach(function(row) {
+    tableHtml += '<tr style="border-bottom:1px solid var(--border-subtle)">';
+    tableHtml += '<td style="padding:0.6rem 0.75rem;font-size:0.8rem;color:var(--text-muted);white-space:nowrap;vertical-align:top;width:120px">' + escapeHtml(row.label) + '</td>';
+    if (row.html) {
+      tableHtml += '<td style="padding:0.6rem 0.75rem;font-size:0.9rem">' + row.html + '</td>';
+    } else {
+      tableHtml += '<td style="padding:0.6rem 0.75rem;font-size:0.9rem;' + (row.mono ? 'font-family:var(--font-mono);' : '') + '">' + escapeHtml(row.value) + '</td>';
+    }
+    tableHtml += '</tr>';
+  });
+  tableHtml += '</table>';
+
+  body.innerHTML = tableHtml;
+  modalEl.appendChild(body);
+
+  // Footer with pipeline link if applicable
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const closeFooterBtn = document.createElement('button');
+  closeFooterBtn.className = 'btn btn-ghost';
+  closeFooterBtn.textContent = 'Close';
+  closeFooterBtn.onclick = closeModal;
+  footer.appendChild(closeFooterBtn);
+
+  if (taskStatus === 'completed' || taskStatus === 'failed' || taskStatus === 'in_progress') {
+    const pipeBtn = document.createElement('button');
+    pipeBtn.className = 'btn btn-primary';
+    pipeBtn.textContent = 'View Pipeline Runs';
+    pipeBtn.onclick = function() { closeModal(); navigate('pipeline'); };
+    footer.appendChild(pipeBtn);
+  }
+  modalEl.appendChild(footer);
+
+  showModal();
+}
+
+async function showNewGoalModal() {
+  // Load all projects for the dropdown
+  let projects = [];
+  try { projects = await api.get('/projects'); } catch(e) {}
+  const activeProjects = projects.filter(p => p.status === 'active' || p.status === 'planning');
+
+  const preselected = currentProjectFilter || '';
+
   showModal(`
     <div class="modal-header">
       <span class="modal-title">Create New Goal</span>
@@ -1292,8 +1921,16 @@ function showNewGoalModal() {
     </div>
     <div class="modal-body">
       <div class="form-group">
+        <label class="form-label">Project</label>
+        <select class="form-select" id="goal-project" onchange="onGoalProjectChange()">
+          <option value="">(No project — standalone goal)</option>
+          ${activeProjects.map(p => `<option value="${p.project_id}" ${p.project_id === preselected ? 'selected' : ''}>${escapeHtml(p.title)} (${p.status})</option>`).join('')}
+        </select>
+      </div>
+      <div id="goal-milestone-wrap"></div>
+      <div class="form-group">
         <label class="form-label">Title</label>
-        <input class="form-input" id="goal-title" placeholder="e.g. Add rate limiting to API" autofocus>
+        <input class="form-input" id="goal-title" placeholder="e.g. Add rate limiting to API">
       </div>
       <div class="form-group">
         <label class="form-label">Description</label>
@@ -1324,7 +1961,29 @@ function showNewGoalModal() {
       <button class="btn btn-primary" onclick="submitNewGoal()">Create Goal</button>
     </div>
   `);
+  // Load milestones if a project is preselected
+  if (preselected) await onGoalProjectChange();
   setTimeout(() => document.getElementById('goal-title')?.focus(), 100);
+}
+
+async function onGoalProjectChange() {
+  const projectId = document.getElementById('goal-project').value;
+  const wrap = document.getElementById('goal-milestone-wrap');
+  if (!projectId) { wrap.innerHTML = ''; return; }
+  try {
+    const milestones = await api.get(`/projects/${projectId}/milestones`);
+    const eligible = milestones.filter(m => m.status === 'active' || m.status === 'pending');
+    if (eligible.length === 0) {
+      wrap.innerHTML = '<div class="form-hint" style="color:var(--yellow);margin-bottom:0.75rem">No active or pending milestones in this project.</div>';
+      return;
+    }
+    wrap.innerHTML = `<div class="form-group">
+      <label class="form-label">Milestone</label>
+      <select class="form-select" id="goal-milestone">
+        ${eligible.map(m => `<option value="${m.milestone_id}" ${m.status === 'active' ? 'selected' : ''}>${escapeHtml(m.title)} (${m.status})</option>`).join('')}
+      </select>
+    </div>`;
+  } catch(e) { wrap.innerHTML = ''; }
 }
 
 async function submitNewGoal() {
@@ -1333,6 +1992,10 @@ async function submitNewGoal() {
   const priority = document.getElementById('goal-priority').value;
   const constraintsRaw = document.getElementById('goal-constraints').value.trim();
   const criteriaRaw = document.getElementById('goal-criteria').value.trim();
+  const projectEl = document.getElementById('goal-project');
+  const projectId = projectEl ? projectEl.value : '';
+  const milestoneEl = document.getElementById('goal-milestone');
+  const milestoneId = milestoneEl ? milestoneEl.value : null;
 
   if (!title) { toast('Title is required', 'error'); return; }
   if (!description) { toast('Description is required', 'error'); return; }
@@ -1341,9 +2004,18 @@ async function submitNewGoal() {
   const acceptance_criteria = criteriaRaw ? criteriaRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
 
   try {
-    await api.post('/goals', { title, description, priority, constraints, acceptance_criteria });
-    closeModal();
-    toast('Goal created successfully', 'success');
+    if (projectId && milestoneId) {
+      await api.post(
+        `/projects/${projectId}/milestones/${milestoneId}/goals`,
+        { title, description, priority, constraints, acceptance_criteria }
+      );
+      closeModal();
+      toast('Goal created and linked to project', 'success');
+    } else {
+      await api.post('/goals', { title, description, priority, constraints, acceptance_criteria });
+      closeModal();
+      toast('Goal created successfully', 'success');
+    }
     await loadGoalsTable();
   } catch (e) {
     toast(`Failed to create goal: ${e.message}`, 'error');
@@ -1397,7 +2069,7 @@ async function loadPipelineTable() {
     body.innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>Run ID</th><th>Agent</th><th>Status</th><th>Stage</th><th>Started</th><th>Actions</th>
+          <th>Run ID</th><th style="min-width:120px">Agent</th><th>Status</th><th>Stage</th><th>Started</th><th>Actions</th>
         </tr></thead>
         <tbody>
           ${runs.map(r => {
@@ -1407,7 +2079,7 @@ async function loadPipelineTable() {
             return `
             <tr class="expandable" data-run-id="${runId}">
               <td class="truncate-id">${truncateId(runId)}</td>
-              <td class="truncate-id">${truncateId(r.agent_id)}</td>
+              <td style="font-size:0.85rem" title="${escapeHtml(r.agent_id || '')}">${escapeHtml(r.agent_id || '---')}</td>
               <td>${statusBadge(r.status)}</td>
               <td><span style="color:var(--text-secondary)">${escapeHtml(r.current_stage || r.stage || '---')}</span></td>
               <td class="truncate-id">${formatDate(r.started_at || r.created_at)}</td>
@@ -1456,26 +2128,147 @@ function renderRunStages(runId, run) {
   const currentStage = (run.current_stage || '').toUpperCase();
   const status = (run.status || '').toLowerCase();
   const stageResults = run.stage_results || run.stages || {};
+  const meta = run.metadata || {};
+  const riskData = meta.risk_assessment || {};
+  const isBlocked = status === 'blocked';
 
+  // --- Build human-readable risk explanation ---
+  function buildRiskExplanation(factors, agentId, agentTrust) {
+    const lines = [];
+    const factorMap = {};
+    (factors || []).forEach(f => { factorMap[f.name] = f; });
+
+    // File sensitivity
+    const fs = factorMap['file_sensitivity'];
+    if (fs) {
+      if (fs.score >= 0.8) lines.push('This change touches sensitive files (infrastructure, config, or auth-related). These files can cause outages if broken.');
+      else if (fs.score >= 0.5) lines.push('The files being changed are moderately sensitive.');
+    }
+
+    // Blast radius
+    const br = factorMap['blast_radius'];
+    if (br && br.score >= 0.5) {
+      lines.push(`This change affects multiple services, increasing the blast radius if something goes wrong.`);
+    }
+
+    // Agent trust
+    const at = factorMap['agent_trust'];
+    if (at) {
+      if (agentTrust !== undefined && agentTrust < 0.6) {
+        lines.push(`${agentId || 'This agent'} is relatively new and hasn't built up enough trust yet. Trust increases automatically with each successful deployment.`);
+      } else if (at.score >= 0.5) {
+        lines.push(`${agentId || 'This agent'} has moderate trust. More successful deployments will reduce future risk scores.`);
+      }
+    }
+
+    // Validation confidence
+    const vc = factorMap['validation_confidence'];
+    if (vc && vc.score >= 0.7) {
+      lines.push('Automated validation had low confidence in this change, which means the safety checks could not fully verify it.');
+    }
+
+    // Time of day
+    const tod = factorMap['time_of_day'];
+    if (tod && tod.score >= 0.6) {
+      lines.push('This deploy is happening outside business hours, when incident response is slower.');
+    }
+
+    if (lines.length === 0) lines.push('Multiple risk factors combined to push the overall score above the auto-deploy threshold.');
+
+    return lines;
+  }
+
+  // --- Summary card for blocked runs ---
+  let summaryHtml = '';
+  if (isBlocked) {
+    const riskScore = riskData.risk_score;
+    const riskPct = riskScore !== undefined ? (riskScore * 100).toFixed(0) : '?';
+    const riskColor = riskScore >= 0.7 ? 'var(--red)' : riskScore >= 0.4 ? 'var(--amber)' : 'var(--green)';
+    const riskLevel = riskData.risk_level || 'unknown';
+    const route = riskData.recommended_route || 'human_approval';
+    const riskExplanation = buildRiskExplanation(riskData.factors, run.agent_id, riskData.agent_trust_score);
+
+    summaryHtml = `
+      <div style="background:var(--bg-primary);border:1px solid var(--amber);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem">
+          <span style="font-size:1.2rem;color:var(--amber)">&#9888;</span>
+          <strong style="flex:1">Awaiting Human Approval</strong>
+          <span style="font-family:var(--font-mono);font-weight:700;color:${riskColor};font-size:1.1rem">${riskPct}% risk</span>
+          ${statusBadge(riskLevel)}
+        </div>
+        ${meta.intent_description ? `
+          <div style="font-size:0.9rem;color:var(--text-primary);margin-bottom:0.75rem;line-height:1.5">
+            ${escapeHtml(meta.intent_description)}
+          </div>
+        ` : ''}
+        <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem">
+          <strong style="color:var(--text-primary)">Agent:</strong> ${escapeHtml(run.agent_id)}
+          <span style="margin-left:1rem"><strong style="color:var(--text-primary)">Route:</strong> ${escapeHtml(route.replace(/_/g, ' '))}</span>
+        </div>
+        <div style="background:var(--bg-card);border-radius:8px;padding:0.75rem 1rem;margin-bottom:0.75rem;border-left:3px solid var(--amber)">
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;font-weight:600;letter-spacing:0.03em">Why this needs your approval</div>
+          <ul style="margin:0;padding-left:1.25rem;font-size:0.85rem;color:var(--text-primary);line-height:1.7">
+            ${riskExplanation.map(line => `<li>${escapeHtml(line)}</li>`).join('')}
+          </ul>
+        </div>
+        ${(meta.intent_files || []).length > 0 ? `
+          <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.25rem;text-transform:uppercase;font-weight:600">Files changed</div>
+          <div style="font-family:var(--font-mono);font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;line-height:1.8">
+            ${(meta.intent_files || []).map(f => `<span style="background:var(--bg-card);padding:0.15rem 0.5rem;border-radius:4px;margin-right:0.35rem;white-space:nowrap">${escapeHtml(f)}</span>`).join('')}
+          </div>
+        ` : ''}
+        ${(riskData.factors || []).length > 0 ? `
+          <details style="margin-bottom:0.5rem">
+            <summary style="font-size:0.8rem;color:var(--text-muted);cursor:pointer;text-transform:uppercase;font-weight:600;margin-bottom:0.5rem">Risk factor breakdown</summary>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.5rem;margin-top:0.5rem">
+              ${(riskData.factors || []).map(f => {
+                const val = (f.score * 100).toFixed(0);
+                const fColor = f.score >= 0.7 ? 'var(--red)' : f.score >= 0.4 ? 'var(--amber)' : 'var(--green)';
+                return `<div style="background:var(--bg-primary);border-radius:6px;padding:0.5rem 0.75rem">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span style="font-size:0.8rem;color:var(--text-secondary)">${escapeHtml(f.name.replace(/_/g, ' '))}</span>
+                    <span style="font-family:var(--font-mono);font-weight:600;color:${fColor}">${val}%</span>
+                  </div>
+                  <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.2rem">${escapeHtml(f.description)}</div>
+                </div>`;
+              }).join('')}
+            </div>
+          </details>
+          ${riskData.agent_trust_score !== undefined ? `
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem">
+              Agent trust: <strong style="color:var(--amber)">${(riskData.agent_trust_score * 100).toFixed(0)}%</strong>
+              — trust increases automatically with each successful deployment.
+            </div>
+          ` : ''}
+        ` : ''}
+      </div>
+    `;
+  }
+
+  // --- Stage pipeline visualization ---
   let stagesHtml = '<div class="pipeline-stages">';
   allStages.forEach((stage, i) => {
+    const sr = stageResults[stage.toLowerCase()] || stageResults[stage];
     let cls = 'pending';
-    if (stageResults[stage.toLowerCase()] || stageResults[stage]) {
-      cls = 'completed';
-    }
-    if (stage === currentStage) {
-      cls = status === 'failed' ? 'failed' : 'active';
+    if (sr) {
+      const srStatus = (sr.status || '').toLowerCase();
+      if (srStatus === 'passed') cls = 'completed';
+      else if (srStatus === 'failed') cls = 'failed';
+      else if (srStatus === 'blocked') cls = 'active';
+      else cls = 'completed';
     }
     stagesHtml += `<span class="pipeline-stage ${cls}">${stage}</span>`;
     if (i < allStages.length - 1) stagesHtml += '<span class="stage-arrow">&#8594;</span>';
   });
   stagesHtml += '</div>';
 
+  // --- Stage details (collapsible) ---
   let detailHtml = '';
   if (Object.keys(stageResults).length > 0) {
     detailHtml = '<div style="margin-top:1rem">';
     for (const [stage, result] of Object.entries(stageResults)) {
-      const passed = result.passed || result.success;
+      const stageStatus = (result.status || '').toLowerCase();
+      const passed = stageStatus === 'passed';
       const stageId = `stage-${escapeHtml(runId)}-${escapeHtml(stage)}`;
       detailHtml += `
         <div style="margin-bottom:0.25rem">
@@ -1483,24 +2276,60 @@ function renderRunStages(runId, run) {
             <span class="collapsible-arrow">&#9654;</span>
             <span class="signal-icon ${passed ? 'pass' : 'fail'}">${passed ? '&#10003;' : '&#10007;'}</span>
             <strong style="text-transform:uppercase;flex:1">${escapeHtml(stage)}</strong>
-            <span class="badge badge-${passed ? 'green' : 'red'}">${passed ? 'passed' : 'failed'}</span>
+            <span class="badge badge-${passed ? 'green' : (stageStatus === 'blocked' ? 'amber' : 'red')}">${escapeHtml(stageStatus || 'unknown')}</span>
           </div>
           <div class="collapsible-body" id="${stageId}">
-            ${renderStageDetail(stage, result)}
+            ${renderStageDetail(stage, result.output || result)}
           </div>
         </div>`;
     }
     detailHtml += '</div>';
   }
 
-  // Additional info
-  let extraHtml = '<div style="margin-top:1rem;display:flex;gap:2rem;color:var(--text-secondary);font-size:0.85rem">';
-  if (run.deploy_route) extraHtml += `<span>Route: ${statusBadge(run.deploy_route)}</span>`;
-  if (run.risk_score !== undefined) extraHtml += `<span>Risk: <strong>${(run.risk_score * 100).toFixed(0)}%</strong></span>`;
-  if (run.agent_id) extraHtml += `<span>Agent: <span class="mono">${truncateId(run.agent_id)}</span></span>`;
-  extraHtml += '</div>';
+  // --- Worktree / branch info ---
+  let worktreeHtml = '';
+  const wtPath = meta.worktree_path;
+  const branchName = meta.branch_name;
+  if (wtPath || branchName) {
+    const merged = meta.merged ? '<span class="badge badge-green" style="margin-left:0.5rem">merged</span>' : '';
+    const committed = meta.worktree_committed ? '<span class="badge badge-blue" style="margin-left:0.5rem">committed</span>' : '';
+    worktreeHtml = `
+      <div style="background:var(--bg-card);border-radius:8px;padding:0.75rem 1rem;margin-top:0.75rem;border:1px solid var(--border-subtle);font-size:0.85rem">
+        <div style="display:flex;align-items:center;gap:0.5rem;color:var(--text-muted);font-size:0.75rem;text-transform:uppercase;font-weight:600;margin-bottom:0.35rem">Git Worktree</div>
+        ${branchName ? `<div style="margin-bottom:0.25rem"><span style="color:var(--text-muted)">Branch:</span> <code style="color:var(--blue)">${escapeHtml(branchName)}</code>${merged}${committed}</div>` : ''}
+        ${wtPath ? `<div><span style="color:var(--text-muted)">Path:</span> <code style="font-size:0.8rem">${escapeHtml(wtPath)}</code></div>` : ''}
+      </div>
+    `;
+  }
 
-  container.innerHTML = stagesHtml + detailHtml + extraHtml;
+  // --- Diff viewer ---
+  let diffHtml = '';
+  const runDiff = run.metadata?.diff;
+  if (runDiff) {
+    const diffLines = runDiff.split('\n').map(line => {
+      const eLine = escapeHtml(line);
+      if (line.startsWith('+++ ') || line.startsWith('--- ')) {
+        return `<span style="color:var(--text-muted);font-weight:600">${eLine}</span>`;
+      } else if (line.startsWith('diff --git')) {
+        return `<span style="color:var(--blue);font-weight:700;display:block;margin-top:0.75rem;padding-bottom:0.25rem;border-bottom:1px solid var(--border)">${eLine}</span>`;
+      } else if (line.startsWith('@@')) {
+        return `<span style="color:var(--blue)">${eLine}</span>`;
+      } else if (line.startsWith('+')) {
+        return `<span style="color:#4ade80;background:rgba(74,222,128,0.08)">${eLine}</span>`;
+      } else if (line.startsWith('-')) {
+        return `<span style="color:#f87171;background:rgba(248,113,113,0.08)">${eLine}</span>`;
+      }
+      return `<span>${eLine}</span>`;
+    }).join('\n');
+
+    diffHtml = `
+      <details style="margin-top:1rem" open>
+        <summary style="font-size:0.85rem;color:var(--text-muted);cursor:pointer;text-transform:uppercase;font-weight:600;margin-bottom:0.5rem;letter-spacing:0.03em">Code Changes</summary>
+        <pre style="background:var(--bg-card);border-radius:8px;padding:1rem;font-size:0.78rem;line-height:1.6;overflow-x:auto;max-height:500px;overflow-y:auto;border:1px solid var(--border);margin:0">${diffLines}</pre>
+      </details>`;
+  }
+
+  container.innerHTML = summaryHtml + stagesHtml + worktreeHtml + diffHtml + detailHtml;
 }
 
 function toggleCollapsible(id, header) {
@@ -1547,14 +2376,19 @@ function renderStageDetail(stage, result) {
         ${result.deploy_route ? `<span style="margin-left:1rem;color:var(--text-secondary)">Route:</span> ${statusBadge(result.deploy_route)}` : ''}
       </div>`;
     }
-    const factors = result.factors || result.risk_factors || {};
-    if (Object.keys(factors).length > 0) {
+    const factors = result.factors || result.risk_factors || [];
+    const factorList = Array.isArray(factors) ? factors : Object.entries(factors).map(([k, v]) => ({name: k, score: v}));
+    if (factorList.length > 0) {
       html += '<div class="risk-factors">';
-      for (const [key, val] of Object.entries(factors)) {
-        const display = typeof val === 'number' ? (val * 100).toFixed(0) + '%' : String(val);
+      for (const f of factorList) {
+        const name = f.name || f.label || 'unknown';
+        const score = f.score !== undefined ? f.score : f.value;
+        const display = typeof score === 'number' ? (score * 100).toFixed(0) + '%' : String(score || '');
+        const fColor = typeof score === 'number' ? (score >= 0.7 ? 'var(--red)' : score >= 0.4 ? 'var(--amber)' : 'var(--green)') : 'var(--text-secondary)';
         html += `<div class="risk-factor">
-          <span class="risk-factor-label">${escapeHtml(key.replace(/_/g, ' '))}</span>
-          <span class="risk-factor-value">${escapeHtml(display)}</span>
+          <span class="risk-factor-label">${escapeHtml(name.replace(/_/g, ' '))}</span>
+          <span class="risk-factor-value" style="color:${fColor}">${escapeHtml(display)}</span>
+          ${f.description ? `<span style="font-size:0.75rem;color:var(--text-muted);display:block">${escapeHtml(f.description)}</span>` : ''}
         </div>`;
       }
       html += '</div>';
@@ -1631,16 +2465,134 @@ async function rejectRun(runId) {
   }
 }
 
+// ===== Agent Status Panel (dashboard) =====
+function phaseBadge(phase) {
+  const labels = {
+    idle: 'Idle', claiming: 'Claiming', calling_llm: 'LLM',
+    writing_files: 'Writing', running_tests: 'Testing',
+    submitting: 'Submitting', waiting: 'Waiting',
+  };
+  const label = labels[phase] || phase || 'Unknown';
+  // Both phase and label are sanitized through escapeHtml
+  return `<span class="phase-badge phase-${escapeHtml(phase || 'idle')}">${escapeHtml(label)}</span>`;
+}
+
+function formatElapsed(seconds) {
+  if (!seconds || seconds < 1) return '';
+  if (seconds < 60) return Math.round(seconds) + 's';
+  if (seconds < 3600) return Math.round(seconds / 60) + 'm';
+  return (seconds / 3600).toFixed(1) + 'h';
+}
+
+async function freezeClick() {
+  if (!confirm('FREEZE the pipeline? This will block ALL new claims and submissions.')) return;
+  try {
+    await api.post('/pipeline/freeze');
+    toast('Pipeline FROZEN', 'warning');
+    renderDashboard();
+  } catch (e) {
+    toast('Failed to freeze: ' + e.message, 'error');
+  }
+}
+
+async function unfreezeClick() {
+  if (!confirm('Unfreeze the pipeline? Agents will be able to claim and submit work again.')) return;
+  try {
+    await api.post('/pipeline/unfreeze');
+    toast('Pipeline unfrozen', 'success');
+    renderDashboard();
+  } catch (e) {
+    toast('Failed to unfreeze: ' + e.message, 'error');
+  }
+}
+
+async function loadAgentStatusPanel() {
+  const body = document.getElementById('agent-status-body');
+  if (!body) return;
+  try {
+    const statuses = await fetch('/api/agents/status').then(r => r.ok ? r.json() : []);
+    if (!statuses || statuses.length === 0) {
+      body.textContent = 'No agents active';
+      body.style.cssText = 'color:var(--text-muted);font-size:0.85rem;padding:0.5rem';
+      return;
+    }
+    // All dynamic values are sanitized via escapeHtml() before insertion
+    const cards = statuses.map(s => {
+      const isActive = s.phase !== 'idle';
+      const dotColor = isActive ? 'var(--blue)' : 'var(--text-muted)';
+      const agentId = escapeHtml(s.agent_id);
+      const elapsed = formatElapsed(s.elapsed_seconds);
+      const taskTitle = s.current_task_title ? escapeHtml(s.current_task_title) : '';
+      return `<div class="agent-live-card ${isActive ? 'active' : ''}">
+        <div style="display:flex;align-items:center;gap:0.5rem">
+          <div style="width:8px;height:8px;border-radius:50%;background:${dotColor}"></div>
+          <strong style="font-size:0.9rem">${agentId}</strong>
+        </div>
+        <div class="agent-phase-row">
+          ${phaseBadge(s.phase)}
+          <span class="lease-countdown">${escapeHtml(elapsed)}</span>
+        </div>
+        ${taskTitle ? `<div class="agent-task-label" title="${taskTitle}">${taskTitle}</div>` : ''}
+      </div>`;
+    }).join('');
+    body.innerHTML = `<div class="agent-status-grid">${cards}</div>`;
+  } catch (e) {
+    body.textContent = 'Agent status unavailable';
+    body.style.cssText = 'color:var(--text-muted);font-size:0.85rem';
+  }
+}
+
 // ===== Agents =====
 async function renderAgents() {
   app.innerHTML = `
     <div class="section-header">
       <h1 class="section-title">Agents</h1>
     </div>
+    <div class="card" style="margin-bottom:1.25rem">
+      <div class="card-header">
+        <span class="card-title">Live Status</span>
+        <span style="font-size:0.75rem;color:var(--text-muted)">Updates via WebSocket</span>
+      </div>
+      <div class="card-body" id="agents-live-status">
+        <div class="loading-state"><div class="spinner"></div><span>Loading...</span></div>
+      </div>
+    </div>
     <div id="agents-grid" class="agent-grid">
       <div class="loading-state" style="grid-column:1/-1"><div class="spinner spinner-lg"></div><span>Loading agents...</span></div>
     </div>
   `;
+
+  // Load live status panel at top of agents page
+  try {
+    const statuses = await fetch('/api/agents/status').then(r => r.ok ? r.json() : []);
+    const liveBody = document.getElementById('agents-live-status');
+    if (statuses && statuses.length > 0) {
+      const cards = statuses.map(s => {
+        const isActive = s.phase !== 'idle';
+        const dotColor = isActive ? 'var(--blue)' : 'var(--text-muted)';
+        const agentId = escapeHtml(s.agent_id);
+        const elapsed = formatElapsed(s.elapsed_seconds);
+        const taskTitle = s.current_task_title ? escapeHtml(s.current_task_title) : '';
+        const taskId = s.current_task_id ? escapeHtml(s.current_task_id.substring(0, 8)) : '';
+        return `<div class="agent-live-card ${isActive ? 'active' : ''}">
+          <div style="display:flex;align-items:center;gap:0.5rem">
+            <div style="width:8px;height:8px;border-radius:50%;background:${dotColor}"></div>
+            <strong style="font-size:0.9rem">${agentId}</strong>
+          </div>
+          <div class="agent-phase-row">
+            ${phaseBadge(s.phase)}
+            <span class="lease-countdown">${escapeHtml(elapsed)}</span>
+          </div>
+          ${taskTitle ? `<div class="agent-task-label" title="${taskTitle}">${taskTitle}</div>` : ''}
+          ${taskId && isActive ? `<div style="font-size:0.7rem;color:var(--text-muted);font-family:var(--font-mono);margin-top:0.15rem">task:${taskId}</div>` : ''}
+        </div>`;
+      }).join('');
+      liveBody.innerHTML = `<div class="agent-status-grid">${cards}</div>`;
+    } else {
+      liveBody.textContent = 'No agents have connected yet';
+      liveBody.style.cssText = 'color:var(--text-muted);font-size:0.85rem;padding:0.5rem';
+    }
+  } catch (_) {}
 
   const container = document.getElementById('agents-grid');
   let agents;
@@ -1655,6 +2607,13 @@ async function renderAgents() {
       container.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">&#9881;</div><div class="empty-state-text">No agents registered.</div></div>';
       return;
     }
+    // Fetch live statuses to merge with agent data
+    let liveStatusMap = {};
+    try {
+      const liveStatuses = await fetch('/api/agents/status').then(r => r.ok ? r.json() : []);
+      (liveStatuses || []).forEach(s => { liveStatusMap[s.agent_id] = s; });
+    } catch (_) {}
+
     // All dynamic text escaped via escapeHtml() to prevent XSS
     container.innerHTML = agents.map(a => {
       const trustScore = a.overall_trust ?? a.trust_score ?? 0.5;
@@ -1662,7 +2621,9 @@ async function renderAgents() {
       const successRate = a.success_rate ?? (totalDeploys > 0 ? ((a.successful_deploys || 0) / totalDeploys * 100) : 0);
       const initials = (a.name || a.agent_id || '??').substring(0, 2).toUpperCase();
       const domainScores = a.domain_trust || a.trust_scores || {};
-      const agentStatus = a.status || 'available';
+      const liveStatus = liveStatusMap[a.agent_id];
+      const livePhase = liveStatus ? liveStatus.phase : null;
+      const agentStatus = livePhase && livePhase !== 'idle' ? 'busy' : (a.status || 'available');
       const queueDepth = a.queue_depth ?? a.task_count ?? null;
       const capabilities = a.capabilities || [];
 
@@ -1674,6 +2635,7 @@ async function renderAgents() {
               <div style="display:flex;align-items:center;gap:0.5rem">
                 <div class="agent-name">${escapeHtml(a.name || a.agent_id || 'Unknown Agent')}</div>
                 <div class="agent-status-dot ${escapeHtml(agentStatus)}" title="${escapeHtml(agentStatus)}"></div>
+                ${livePhase && livePhase !== 'idle' ? phaseBadge(livePhase) : ''}
               </div>
               <div class="agent-id">${truncateId(a.agent_id)}</div>
             </div>
@@ -1713,6 +2675,13 @@ async function renderAgents() {
               <div class="agent-stat-value" style="text-transform:capitalize">${escapeHtml(agentStatus)}</div>
             </div>
           </div>
+          ${liveStatus && liveStatus.current_task_title ? `
+            <div style="margin-top:0.5rem;padding:0.5rem 0.75rem;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.15);border-radius:6px;font-size:0.8rem">
+              <div style="color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;font-weight:600;margin-bottom:0.2rem">Current Task</div>
+              <div style="color:var(--text-primary)">${escapeHtml(liveStatus.current_task_title)}</div>
+              <div style="color:var(--text-muted);font-size:0.75rem;margin-top:0.15rem">${formatElapsed(liveStatus.elapsed_seconds)} elapsed</div>
+            </div>
+          ` : ''}
           <div class="agent-detail">
             <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;font-weight:600">Domain Trust</div>
             ${Object.keys(domainScores).length > 0 ? Object.entries(domainScores).map(([domain, score]) => `
@@ -1817,6 +2786,351 @@ async function renderConstraints() {
   }
 }
 
+// ===== Config Editor =====
+let _configData = null;
+let _constraintsData = null;
+
+async function renderConfig() {
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Pipeline Configuration</h1>
+      <div style="display:flex;gap:0.5rem">
+        <button class="btn" onclick="configReset()" id="config-reset-btn">Reset</button>
+        <button class="btn btn-primary" onclick="configSave()" id="config-save-btn">Save Changes</button>
+      </div>
+    </div>
+    <div id="config-editor">
+      <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading configuration...</span></div>
+    </div>
+  `;
+  await loadConfigEditor();
+}
+
+async function loadConfigEditor() {
+  const container = document.getElementById('config-editor');
+  try {
+    const [cfg, cst] = await Promise.all([
+      api.get('/config'),
+      api.get('/config/constraints'),
+    ]);
+    _configData = cfg;
+    _constraintsData = cst;
+    renderConfigSections(container, cfg, cst);
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function renderConfigSections(container, cfg, cst) {
+  container.innerHTML = `
+    ${renderPipelineSection(cfg.pipeline || {})}
+    ${renderThresholdsSection(cfg.risk_thresholds || {})}
+    ${renderSignalWeightsSection(cfg.signal_weights || {})}
+    ${renderRiskFactorWeightsSection(cfg.risk_factor_weights || {})}
+    ${renderDeployRoutesSection(cfg.deploy_routes || {})}
+    ${renderTrustSection(cfg.trust || {})}
+    ${renderSandboxSection(cfg.sandbox || {})}
+    ${renderLeasesSection(cfg.leases || {})}
+    ${renderMonitoringSection(cfg.monitoring || {})}
+    ${renderConstraintsEditorSection(cst)}
+  `;
+}
+
+function cfgSectionCard(title, id, content) {
+  return `
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-body">
+        <h3 style="margin-bottom:1rem;color:var(--text-primary);font-size:1.1rem">${escapeHtml(title)}</h3>
+        <div id="cfg-${id}" class="config-grid">
+          ${content}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function cfgNumberInput(section, key, value, label, opts = {}) {
+  const min = opts.min !== undefined ? opts.min : '';
+  const max = opts.max !== undefined ? opts.max : '';
+  const step = opts.step || (opts.max === 1 ? '0.01' : '1');
+  return `
+    <div class="config-field">
+      <label class="config-label">${escapeHtml(label)}</label>
+      <input type="number" class="config-input" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}"
+             value="${value}" min="${min}" max="${max}" step="${step}">
+    </div>
+  `;
+}
+
+function cfgSlider(section, key, value, label, opts = {}) {
+  const min = opts.min !== undefined ? opts.min : 0;
+  const max = opts.max !== undefined ? opts.max : 1;
+  const step = opts.step || 0.01;
+  return `
+    <div class="config-field">
+      <label class="config-label">${escapeHtml(label)}</label>
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <input type="range" class="config-slider" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}"
+               value="${value}" min="${min}" max="${max}" step="${step}"
+               oninput="this.nextElementSibling.textContent=this.value">
+        <span class="config-slider-value" style="min-width:3rem;font-family:var(--font-mono);color:var(--text-primary)">${value}</span>
+      </div>
+    </div>
+  `;
+}
+
+function cfgToggle(section, key, value, label) {
+  return `
+    <div class="config-field">
+      <label class="config-label">${escapeHtml(label)}</label>
+      <label class="config-toggle">
+        <input type="checkbox" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}" ${value ? 'checked' : ''}>
+        <span class="config-toggle-track"></span>
+      </label>
+    </div>
+  `;
+}
+
+function cfgTextInput(section, key, value, label) {
+  return `
+    <div class="config-field">
+      <label class="config-label">${escapeHtml(label)}</label>
+      <input type="text" class="config-input" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}"
+             value="${escapeHtml(String(value))}">
+    </div>
+  `;
+}
+
+function cfgSelect(section, key, value, label, options) {
+  return `
+    <div class="config-field">
+      <label class="config-label">${escapeHtml(label)}</label>
+      <select class="config-input" data-section="${escapeHtml(section)}" data-key="${escapeHtml(key)}">
+        ${options.map(o => `<option value="${escapeHtml(o)}" ${o === value ? 'selected' : ''}>${escapeHtml(o)}</option>`).join('')}
+      </select>
+    </div>
+  `;
+}
+
+function renderPipelineSection(p) {
+  return cfgSectionCard('Pipeline', 'pipeline', `
+    ${cfgNumberInput('pipeline', 'max_sandbox_iterations', p.max_sandbox_iterations || 5, 'Max Sandbox Iterations', {min: 1, max: 50})}
+    ${cfgNumberInput('pipeline', 'sandbox_timeout', p.sandbox_timeout || 300, 'Sandbox Timeout (s)', {min: 1, max: 3600})}
+    ${cfgToggle('pipeline', 'auto_rollback_enabled', p.auto_rollback_enabled !== false, 'Auto Rollback')}
+  `);
+}
+
+function renderThresholdsSection(t) {
+  return cfgSectionCard('Risk Thresholds', 'risk_thresholds', `
+    ${cfgSlider('risk_thresholds', 'critical', t.critical || 0.85, 'Critical')}
+    ${cfgSlider('risk_thresholds', 'high', t.high || 0.60, 'High')}
+    ${cfgSlider('risk_thresholds', 'medium', t.medium || 0.35, 'Medium')}
+    ${cfgSlider('risk_thresholds', 'low', t.low || 0, 'Low')}
+  `);
+}
+
+function renderSignalWeightsSection(sw) {
+  return cfgSectionCard('Signal Weights', 'signal_weights', `
+    ${cfgSlider('signal_weights', 'static_analysis', sw.static_analysis || 1.0, 'Static Analysis', {min: 0.1, max: 10, step: 0.1})}
+    ${cfgSlider('signal_weights', 'behavioral_diff', sw.behavioral_diff || 1.5, 'Behavioral Diff', {min: 0.1, max: 10, step: 0.1})}
+    ${cfgSlider('signal_weights', 'intent_alignment', sw.intent_alignment || 1.2, 'Intent Alignment', {min: 0.1, max: 10, step: 0.1})}
+    ${cfgSlider('signal_weights', 'resource_bounds', sw.resource_bounds || 1.0, 'Resource Bounds', {min: 0.1, max: 10, step: 0.1})}
+    ${cfgSlider('signal_weights', 'security_scan', sw.security_scan || 2.0, 'Security Scan', {min: 0.1, max: 10, step: 0.1})}
+  `);
+}
+
+function renderRiskFactorWeightsSection(rfw) {
+  return cfgSectionCard('Risk Factor Weights', 'risk_factor_weights', `
+    ${cfgSlider('risk_factor_weights', 'file_sensitivity', rfw.file_sensitivity || 0.25, 'File Sensitivity')}
+    ${cfgSlider('risk_factor_weights', 'blast_radius', rfw.blast_radius || 0.20, 'Blast Radius')}
+    ${cfgSlider('risk_factor_weights', 'agent_trust', rfw.agent_trust || 0.20, 'Agent Trust')}
+    ${cfgSlider('risk_factor_weights', 'validation_confidence', rfw.validation_confidence || 0.20, 'Validation Confidence')}
+    ${cfgSlider('risk_factor_weights', 'time_of_day', rfw.time_of_day || 0.15, 'Time of Day')}
+  `);
+}
+
+function renderDeployRoutesSection(dr) {
+  const routeOptions = ['auto_deploy', 'agent_review', 'human_approval', 'human_approval_canary'];
+  return cfgSectionCard('Deploy Routes', 'deploy_routes', `
+    ${cfgSelect('deploy_routes', 'low', dr.low || 'auto_deploy', 'Low Risk', routeOptions)}
+    ${cfgSelect('deploy_routes', 'medium', dr.medium || 'agent_review', 'Medium Risk', routeOptions)}
+    ${cfgSelect('deploy_routes', 'high', dr.high || 'human_approval', 'High Risk', routeOptions)}
+    ${cfgSelect('deploy_routes', 'critical', dr.critical || 'human_approval_canary', 'Critical Risk', routeOptions)}
+  `);
+}
+
+function renderTrustSection(t) {
+  const weights = t.weights || {};
+  return cfgSectionCard('Trust', 'trust', `
+    ${cfgSlider('trust', 'baseline_trust', t.baseline_trust || 0.5, 'Baseline Trust')}
+    ${cfgNumberInput('trust', 'tenure_ramp_deployments', t.tenure_ramp_deployments || 100, 'Tenure Ramp Deployments', {min: 1, max: 1000})}
+    <div style="grid-column:1/-1;margin-top:0.5rem"><strong style="color:var(--text-secondary);font-size:0.85rem">Trust Weights</strong></div>
+    ${cfgSlider('trust.weights', 'success_rate', weights.success_rate || 0.6, 'Success Rate')}
+    ${cfgSlider('trust.weights', 'rollback_penalty', weights.rollback_penalty || 0.3, 'Rollback Penalty')}
+    ${cfgSlider('trust.weights', 'tenure_bonus', weights.tenure_bonus || 0.1, 'Tenure Bonus')}
+  `);
+}
+
+function renderSandboxSection(s) {
+  const limits = s.resource_limits || {};
+  return cfgSectionCard('Sandbox', 'sandbox', `
+    ${cfgTextInput('sandbox', 'default_image', s.default_image || 'python:3.11-slim', 'Default Image')}
+    <div style="grid-column:1/-1;margin-top:0.5rem"><strong style="color:var(--text-secondary);font-size:0.85rem">Resource Limits</strong></div>
+    ${cfgNumberInput('sandbox.resource_limits', 'max_cpu', limits.max_cpu || 1.0, 'Max CPU', {min: 0.1, max: 16, step: 0.1})}
+    ${cfgNumberInput('sandbox.resource_limits', 'max_memory_mb', limits.max_memory_mb || 512, 'Max Memory (MB)', {min: 64, max: 16384})}
+    ${cfgNumberInput('sandbox.resource_limits', 'max_disk_mb', limits.max_disk_mb || 1024, 'Max Disk (MB)', {min: 64, max: 65536})}
+  `);
+}
+
+function renderLeasesSection(l) {
+  return cfgSectionCard('Leases', 'leases', `
+    ${cfgNumberInput('leases', 'duration', l.duration || 120, 'Duration (s)', {min: 10, max: 3600})}
+    ${cfgNumberInput('leases', 'heartbeat_interval', l.heartbeat_interval || 30, 'Heartbeat Interval (s)', {min: 5, max: 600})}
+    ${cfgNumberInput('leases', 'grace_period', l.grace_period || 15, 'Grace Period (s)', {min: 0, max: 300})}
+    ${cfgNumberInput('leases', 'sweep_interval', l.sweep_interval || 30, 'Sweep Interval (s)', {min: 5, max: 600})}
+  `);
+}
+
+function renderMonitoringSection(m) {
+  return cfgSectionCard('Monitoring', 'monitoring', `
+    ${cfgSlider('monitoring', 'error_rate_threshold', m.error_rate_threshold || 0.05, 'Error Rate Threshold')}
+    ${cfgNumberInput('monitoring', 'latency_p99_threshold_ms', m.latency_p99_threshold_ms || 500, 'Latency P99 (ms)', {min: 10, max: 60000})}
+    ${cfgNumberInput('monitoring', 'rollback_cooldown_seconds', m.rollback_cooldown_seconds || 300, 'Rollback Cooldown (s)', {min: 0, max: 3600})}
+  `);
+}
+
+function renderConstraintsEditorSection(cst) {
+  const constraints = (cst && cst.constraints) || [];
+  if (constraints.length === 0) return '';
+  const severityOptions = ['must', 'should', 'prefer'];
+  const rows = constraints.map((c, i) => `
+    <tr>
+      <td><code style="color:var(--blue)">${escapeHtml(c.constraint_id || '')}</code></td>
+      <td><span class="badge badge-blue">${escapeHtml(c.category || '')}</span></td>
+      <td>
+        <select class="config-input config-input-sm" data-constraint-idx="${i}" data-cfield="severity">
+          ${severityOptions.map(s => `<option value="${s}" ${s === (c.severity || '').toLowerCase() ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="text" class="config-input config-input-sm" data-constraint-idx="${i}" data-cfield="rule" value="${escapeHtml(c.rule || '')}" style="width:100%"></td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="card" style="margin-bottom:1rem">
+      <div class="card-body">
+        <h3 style="margin-bottom:1rem;color:var(--text-primary);font-size:1.1rem">Constraints</h3>
+        <div style="overflow-x:auto">
+          <table class="data-table" id="cfg-constraints-table">
+            <thead><tr><th>ID</th><th>Category</th><th>Severity</th><th>Rule</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function collectConfigFromUI() {
+  // Build the config object from all inputs
+  const cfg = JSON.parse(JSON.stringify(_configData));
+  const editor = document.getElementById('config-editor');
+
+  // Collect regular inputs
+  editor.querySelectorAll('input[data-section][data-key], select[data-section][data-key]').forEach(el => {
+    const section = el.dataset.section;
+    const key = el.dataset.key;
+    let value;
+    if (el.type === 'checkbox') {
+      value = el.checked;
+    } else if (el.type === 'number' || el.type === 'range') {
+      value = parseFloat(el.value);
+    } else {
+      value = el.value;
+    }
+
+    // Handle nested sections like 'trust.weights' or 'sandbox.resource_limits'
+    const parts = section.split('.');
+    let target = cfg;
+    for (const p of parts) {
+      if (!target[p]) target[p] = {};
+      target = target[p];
+    }
+    target[key] = value;
+  });
+
+  return cfg;
+}
+
+function collectConstraintsFromUI() {
+  const data = JSON.parse(JSON.stringify(_constraintsData));
+  const table = document.getElementById('cfg-constraints-table');
+  if (!table) return data;
+
+  table.querySelectorAll('[data-constraint-idx]').forEach(el => {
+    const idx = parseInt(el.dataset.constraintIdx, 10);
+    const field = el.dataset.cfield;
+    if (data.constraints[idx] && field) {
+      data.constraints[idx][field] = el.value;
+    }
+  });
+  return data;
+}
+
+function configValidateUI() {
+  // Basic client-side validation — highlight invalid fields
+  const errors = [];
+  const editor = document.getElementById('config-editor');
+
+  editor.querySelectorAll('input[type="number"], input[type="range"]').forEach(el => {
+    const min = el.min !== '' ? parseFloat(el.min) : -Infinity;
+    const max = el.max !== '' ? parseFloat(el.max) : Infinity;
+    const val = parseFloat(el.value);
+    if (isNaN(val) || val < min || val > max) {
+      el.style.borderColor = 'var(--red)';
+      errors.push(`${el.dataset.section}.${el.dataset.key}: value out of range`);
+    } else {
+      el.style.borderColor = '';
+    }
+  });
+
+  return errors;
+}
+
+async function configSave() {
+  const errors = configValidateUI();
+  if (errors.length > 0) {
+    toast('Fix validation errors before saving', 'error');
+    return;
+  }
+
+  const saveBtn = document.getElementById('config-save-btn');
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
+
+  try {
+    const cfg = collectConfigFromUI();
+    const cst = collectConstraintsFromUI();
+    await Promise.all([
+      api.put('/config', cfg),
+      api.put('/config/constraints', cst),
+    ]);
+    _configData = cfg;
+    _constraintsData = cst;
+    toast('Configuration saved successfully', 'success');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Changes';
+  }
+}
+
+async function configReset() {
+  await loadConfigEditor();
+  toast('Configuration reloaded from server', 'info');
+}
+
 // ===== Projects =====
 async function renderProjects() {
   app.innerHTML = `
@@ -1892,42 +3206,136 @@ async function showProjectDetail(projectId) {
     const totalMs = milestones.length;
     const progressPct = totalMs > 0 ? (completedMs / totalMs * 100) : 0;
     const projectStatus = p.status || 'draft';
+    const isDraft = projectStatus === 'draft' || projectStatus === 'planning';
 
+    // Fetch linked goals for this project
+    let projectGoals = [];
+    try { projectGoals = await api.get(`/projects/${projectId}/goals`); } catch(e) {}
+    const goalsByMilestone = {};
+    milestones.forEach(m => {
+      const mId = m.milestone_id || m.id;
+      goalsByMilestone[mId] = (m.goal_ids || []).map(gid =>
+        projectGoals.find(g => g.goal_id === gid)
+      ).filter(Boolean);
+    });
+
+    // --- Build milestone list ---
     let milestonesHtml = '';
     if (milestones.length > 0) {
       milestonesHtml = `
         <div style="margin-top:1.25rem">
           <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem;text-transform:uppercase;font-weight:600">Milestones</div>
-          <div class="project-progress" style="margin-bottom:0.75rem">
+          ${!isDraft ? `<div class="project-progress" style="margin-bottom:0.75rem">
             <div class="progress-bar">
               <div class="progress-fill" style="width:${progressPct}%;background:${progressPct >= 100 ? 'var(--green)' : 'var(--blue)'}"></div>
             </div>
             <span style="font-size:0.8rem;color:var(--text-muted)">${completedMs}/${totalMs} complete</span>
-          </div>
+          </div>` : ''}
           <ul class="milestone-list">
-            ${milestones.map(m => {
+            ${milestones.map((m, idx) => {
+              const mId = m.milestone_id || m.id;
               const mStatus = (m.status || 'pending').toLowerCase();
               const checkCls = mStatus === 'completed' || mStatus === 'done' ? 'done' :
                                mStatus === 'active' || mStatus === 'in_progress' ? 'active' : '';
               const checkMark = mStatus === 'completed' || mStatus === 'done' ? '&#10003;' :
                                 mStatus === 'active' || mStatus === 'in_progress' ? '&#9679;' : '';
-              return `<li class="milestone-item">
-                <div class="milestone-check ${checkCls}">${checkMark}</div>
-                <div style="flex:1">
-                  <div style="font-weight:500">${escapeHtml(m.title || m.name || 'Milestone')}</div>
-                  ${m.description ? `<div style="font-size:0.8rem;color:var(--text-muted)">${escapeHtml(m.description)}</div>` : ''}
-                </div>
-                ${statusBadge(m.status || 'pending')}
-              </li>`;
+              const msGoals = goalsByMilestone[mId] || [];
+
+              if (isDraft) {
+                // Editable milestone row
+                return `<li class="milestone-item" style="flex-direction:column;align-items:stretch;position:relative">
+                  <div style="display:flex;align-items:center;gap:0.5rem">
+                    <span style="color:var(--text-muted);font-size:0.75rem;font-weight:600;min-width:1.2rem">${idx + 1}.</span>
+                    <div style="flex:1">
+                      <input class="form-input" value="${escapeHtml(m.title || '')}" id="ms-title-${mId}"
+                        style="font-weight:500;margin-bottom:0.25rem;padding:0.3rem 0.5rem"
+                        onchange="saveMilestoneField('${escapeHtml(projectId)}','${mId}')">
+                      <input class="form-input" value="${escapeHtml(m.description || '')}" id="ms-desc-${mId}"
+                        placeholder="Description"
+                        style="font-size:0.85rem;color:var(--text-muted);padding:0.25rem 0.5rem"
+                        onchange="saveMilestoneField('${escapeHtml(projectId)}','${mId}')">
+                    </div>
+                    <button class="btn btn-sm btn-ghost" onclick="removeMilestone('${escapeHtml(projectId)}','${mId}')"
+                      title="Remove milestone" style="color:var(--red);padding:0.25rem 0.4rem;font-size:1rem">&times;</button>
+                  </div>
+                </li>`;
+              } else {
+                // Active project milestone row — full management
+                const goalsHtml = msGoals.length > 0 ? `
+                  <div style="margin-top:0.5rem;padding-left:2rem">
+                    ${msGoals.map(g => `
+                      <div style="display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.5rem;border-top:1px solid var(--border-subtle);cursor:pointer;border-radius:4px"
+                           onmouseover="this.style.background='var(--bg-primary)'" onmouseout="this.style.background=''"
+                           onclick="event.stopPropagation();closeModal();navigateToGoal('${g.goal_id}')">
+                        <span style="color:var(--blue);font-size:0.75rem">&#9654;</span>
+                        <span style="font-size:0.85rem;flex:1">${escapeHtml(g.title)}</span>
+                        ${statusBadge(g.status)}
+                      </div>
+                    `).join('')}
+                  </div>
+                ` : '';
+                const addGoalBtn = mStatus === 'active' ? `
+                  <button class="btn btn-sm btn-primary" onclick="event.stopPropagation();showAddGoalToMilestone('${escapeHtml(projectId)}','${mId}')"
+                    style="margin-top:0.4rem;margin-left:2rem">+ Add Goal</button>
+                ` : '';
+                const completeBtn = mStatus === 'active' ? `
+                  <button class="btn btn-sm btn-success" onclick="event.stopPropagation();completeMilestone('${escapeHtml(projectId)}','${mId}')"
+                    title="Mark this milestone as done">Complete</button>
+                ` : '';
+                return `<li class="milestone-item" style="flex-direction:column;align-items:stretch;padding:0.75rem;border:1px solid var(--border-subtle);border-radius:8px;margin-bottom:0.5rem;${mStatus === 'active' ? 'border-color:var(--blue);background:rgba(59,130,246,0.05)' : ''}">
+                  <div style="display:flex;align-items:center;gap:0.75rem">
+                    <div class="milestone-check ${checkCls}">${checkMark}</div>
+                    <div style="flex:1">
+                      <div style="font-weight:500">${escapeHtml(m.title || m.name || 'Milestone')}</div>
+                      ${m.description ? `<div style="font-size:0.8rem;color:var(--text-muted)">${escapeHtml(m.description)}</div>` : ''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.5rem">
+                      ${statusBadge(m.status || 'pending')}
+                      ${completeBtn}
+                    </div>
+                  </div>
+                  ${goalsHtml}
+                  ${addGoalBtn}
+                </li>`;
+              }
             }).join('')}
           </ul>
         </div>
       `;
     }
 
+    // --- Add milestone form (draft only) ---
+    const addMilestoneHtml = isDraft ? `
+      <div style="margin-top:1rem;border:1px dashed var(--border);border-radius:8px;padding:0.75rem">
+        <div style="display:flex;gap:0.5rem;align-items:flex-end">
+          <div style="flex:1">
+            <input class="form-input" id="new-ms-title" placeholder="New milestone title" style="margin-bottom:0.35rem">
+            <input class="form-input" id="new-ms-desc" placeholder="Description (optional)" style="font-size:0.85rem">
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="addMilestoneToProject('${escapeHtml(projectId)}')" style="white-space:nowrap">+ Add</button>
+        </div>
+      </div>
+    ` : '';
+
+    // --- Description (editable in draft, read-only otherwise) ---
+    const descriptionHtml = isDraft
+      ? `<div class="form-group" style="margin-bottom:1rem">
+          <label class="form-label" style="font-size:0.8rem;text-transform:uppercase;font-weight:600;color:var(--text-muted)">Description</label>
+          <textarea class="form-textarea" id="proj-desc-edit" style="min-height:80px"
+            onchange="saveProjectField('${escapeHtml(projectId)}')">${escapeHtml(p.description || '')}</textarea>
+        </div>`
+      : `<p style="color:var(--text-secondary);margin-bottom:1rem;white-space:pre-line">${escapeHtml(p.description || 'No description')}</p>`;
+
+    // --- Title (editable in draft) ---
+    const titleHtml = isDraft
+      ? `<input class="form-input" id="proj-title-edit" value="${escapeHtml(p.title || '')}"
+          style="font-size:1.1rem;font-weight:600;background:transparent;border:1px solid var(--border);padding:0.4rem 0.6rem"
+          onchange="saveProjectField('${escapeHtml(projectId)}')">`
+      : `<span class="modal-title">${escapeHtml(p.title || p.name || 'Project')}</span>`;
+
     document.getElementById('modal-content').innerHTML = `
       <div class="modal-header">
-        <span class="modal-title">${escapeHtml(p.title || p.name || 'Project')}</span>
+        ${titleHtml}
         <button class="modal-close" onclick="closeModal()">&times;</button>
       </div>
       <div class="modal-body">
@@ -1935,17 +3343,36 @@ async function showProjectDetail(projectId) {
           ${statusBadge(projectStatus)}
           ${p.priority ? priorityBadge(p.priority) : ''}
         </div>
-        <p style="color:var(--text-secondary);margin-bottom:1rem">${escapeHtml(p.description || 'No description')}</p>
+        ${descriptionHtml}
+        ${p.repo_url ? `
+          <div style="margin-bottom:1rem;padding:0.6rem 0.85rem;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;font-size:0.85rem">
+            <span style="color:var(--text-muted);font-size:0.7rem;text-transform:uppercase;font-weight:600">Git Repository</span>
+            <div style="font-family:var(--font-mono);color:var(--blue);margin-top:0.2rem">${escapeHtml(p.repo_url)}</div>
+            ${p.default_branch ? `<div style="color:var(--text-muted);font-size:0.8rem;margin-top:0.15rem">Branch: ${escapeHtml(p.default_branch)}</div>` : ''}
+          </div>
+        ` : ''}
         ${milestonesHtml}
+        ${addMilestoneHtml}
       </div>
-      ${projectStatus === 'draft' ? `
-        <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeModal()">Close</button>
-          <button class="btn btn-success" onclick="activateProject('${escapeHtml(projectId)}')">Activate Project</button>
+      ${isDraft ? `
+        <div class="modal-footer" style="justify-content:space-between">
+          <button class="btn btn-ghost" style="color:var(--red)" onclick="deleteProject('${escapeHtml(projectId)}')">Delete</button>
+          <div style="display:flex;gap:0.5rem">
+            <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+            <button class="btn btn-success" onclick="activateProject('${escapeHtml(projectId)}')" ${milestones.length === 0 ? 'disabled title="Add at least one milestone first"' : ''}>Activate Project</button>
+          </div>
         </div>
       ` : `
-        <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+        <div class="modal-footer" style="justify-content:space-between">
+          <div style="display:flex;gap:0.5rem">
+            ${projectStatus === 'active' ? `<button class="btn btn-ghost" style="color:var(--amber)" onclick="pauseProject('${escapeHtml(projectId)}')">Pause</button>` : ''}
+            ${projectStatus === 'paused' ? `<button class="btn btn-ghost" style="color:var(--green)" onclick="resumeProject('${escapeHtml(projectId)}')">Resume</button>` : ''}
+            ${projectStatus !== 'completed' && projectStatus !== 'cancelled' ? `<button class="btn btn-ghost" style="color:var(--red)" onclick="cancelProject('${escapeHtml(projectId)}')">Cancel</button>` : ''}
+          </div>
+          <div style="display:flex;gap:0.5rem">
+            <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+            <button class="btn btn-primary" onclick="closeModal();currentProjectFilter='${escapeHtml(projectId)}';navigate('goals')">Manage Goals</button>
+          </div>
         </div>
       `}
     `;
@@ -1962,7 +3389,24 @@ async function showProjectDetail(projectId) {
   }
 }
 
+async function deleteProject(projectId) {
+  if (!confirm('Delete this project? This cannot be undone.')) return;
+  try {
+    const r = await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: r.statusText }));
+      throw new Error(err.detail || r.statusText);
+    }
+    closeModal();
+    toast('Project deleted', 'success');
+    await loadProjectsList();
+  } catch (e) {
+    toast(`Failed to delete: ${e.message}`, 'error');
+  }
+}
+
 async function activateProject(projectId) {
+  if (!confirm('Activate this project? This will create goals, decompose tasks, and make them available for agents to claim.')) return;
   try {
     await api.post(`/projects/${projectId}/activate`);
     closeModal();
@@ -1970,6 +3414,101 @@ async function activateProject(projectId) {
     await loadProjectsList();
   } catch (e) {
     toast(`Failed to activate project: ${e.message}`, 'error');
+  }
+}
+
+async function pauseProject(projectId) {
+  if (!confirm('Pause this project? Agents will not see its tasks.')) return;
+  try {
+    await api.post('/projects/' + projectId + '/pause');
+    toast('Project paused', 'success');
+    await showProjectDetail(projectId);
+    loadProjectsList();
+  } catch (e) {
+    toast('Failed to pause project: ' + e.message, 'error');
+  }
+}
+
+async function resumeProject(projectId) {
+  try {
+    await api.post('/projects/' + projectId + '/resume');
+    toast('Project resumed', 'success');
+    await showProjectDetail(projectId);
+    loadProjectsList();
+  } catch (e) {
+    toast('Failed to resume project: ' + e.message, 'error');
+  }
+}
+
+async function cancelProject(projectId) {
+  if (!confirm('Cancel this project? All active leases will be revoked.')) return;
+  try {
+    await api.post('/projects/' + projectId + '/cancel');
+    toast('Project cancelled', 'success');
+    await showProjectDetail(projectId);
+    loadProjectsList();
+  } catch (e) {
+    toast('Failed to cancel project: ' + e.message, 'error');
+  }
+}
+
+async function addMilestoneToProject(projectId) {
+  const title = document.getElementById('new-ms-title').value.trim();
+  const description = document.getElementById('new-ms-desc').value.trim();
+  if (!title) { toast('Milestone title is required', 'error'); return; }
+  try {
+    await api.post(`/projects/${projectId}/milestones`, { title, description });
+    toast('Milestone added', 'success');
+    await showProjectDetail(projectId);
+  } catch (e) {
+    toast(`Failed to add milestone: ${e.message}`, 'error');
+  }
+}
+
+async function saveProjectField(projectId) {
+  const titleEl = document.getElementById('proj-title-edit');
+  const descEl = document.getElementById('proj-desc-edit');
+  const body = {};
+  if (titleEl) body.title = titleEl.value.trim();
+  if (descEl) body.description = descEl.value.trim();
+  try {
+    await api.patch(`/projects/${projectId}`, body);
+    toast('Saved', 'success');
+    loadProjectsList();
+  } catch (e) {
+    toast(`Save failed: ${e.message}`, 'error');
+  }
+}
+
+async function saveMilestoneField(projectId, milestoneId) {
+  const title = document.getElementById(`ms-title-${milestoneId}`)?.value.trim();
+  const description = document.getElementById(`ms-desc-${milestoneId}`)?.value.trim();
+  try {
+    await api.patch(`/projects/${projectId}/milestones/${milestoneId}`, { title, description });
+    toast('Saved', 'success');
+  } catch (e) {
+    toast(`Save failed: ${e.message}`, 'error');
+  }
+}
+
+async function removeMilestone(projectId, milestoneId) {
+  try {
+    await api.del(`/projects/${projectId}/milestones/${milestoneId}`);
+    toast('Milestone removed', 'success');
+    await showProjectDetail(projectId);
+  } catch (e) {
+    toast(`Failed to remove: ${e.message}`, 'error');
+  }
+}
+
+async function completeMilestone(projectId, milestoneId) {
+  try {
+    await api.post(`/projects/${projectId}/milestones/${milestoneId}/complete`);
+    toast('Milestone completed — next milestone activated', 'success');
+    await showProjectDetail(projectId);
+    loadProjectsList();
+  } catch (e) {
+    toast(`Failed to complete milestone: ${e.message}`, 'error');
   }
 }
 
@@ -1997,6 +3536,11 @@ function showNewProjectModal() {
           <option value="critical">Critical</option>
         </select>
       </div>
+      <div class="form-group">
+        <label class="form-label">Git Repository <span style="color:var(--text-muted);font-weight:400">(optional)</span></label>
+        <input class="form-input" id="project-repo-url" placeholder="e.g. /path/to/repo or https://github.com/org/repo.git">
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem">Local path or remote URL. Agents will clone and work in git worktrees.</div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
@@ -2010,17 +3554,529 @@ async function submitNewProject() {
   const title = document.getElementById('project-title').value.trim();
   const description = document.getElementById('project-description').value.trim();
   const priority = document.getElementById('project-priority').value;
+  const repoUrl = document.getElementById('project-repo-url').value.trim();
 
   if (!title) { toast('Title is required', 'error'); return; }
   if (!description) { toast('Description is required', 'error'); return; }
 
+  const body = { title, description, priority };
+  if (repoUrl) body.repo_url = repoUrl;
+
   try {
-    await api.post('/projects', { title, description, priority });
+    await api.post('/projects', body);
     closeModal();
     toast('Project created successfully', 'success');
     await loadProjectsList();
   } catch (e) {
     toast(`Failed to create project: ${e.message}`, 'error');
+  }
+}
+
+// ===== Activity Tab — Mission Control =====
+let activityEvents = [];
+let activityFilter = 'all';
+let pulseCanvas = null;
+let pulseCtx = null;
+let pulseData = [];
+let pulseAnimFrame = null;
+
+const EVENT_TYPE_CONFIG = {
+  'pipeline.started':   { icon: '&#9654;', color: 'blue',   label: 'Pipeline Started',   category: 'pipeline' },
+  'pipeline.passed':    { icon: '&#10003;', color: 'green',  label: 'Pipeline Passed',    category: 'pipeline' },
+  'pipeline.failed':    { icon: '&#10007;', color: 'red',    label: 'Pipeline Failed',    category: 'pipeline' },
+  'approval.needed':    { icon: '&#9888;', color: 'amber',  label: 'Approval Needed',    category: 'approval' },
+  'approval.granted':   { icon: '&#10003;', color: 'green',  label: 'Approval Granted',   category: 'approval' },
+  'approval.rejected':  { icon: '&#10007;', color: 'red',    label: 'Approval Rejected',  category: 'approval' },
+  'goal.created':       { icon: '&#9733;', color: 'purple', label: 'Goal Created',       category: 'goal' },
+  'goal.activated':     { icon: '&#9654;', color: 'blue',   label: 'Goal Activated',     category: 'goal' },
+  'goal.completed':     { icon: '&#10003;', color: 'green',  label: 'Goal Completed',     category: 'goal' },
+  'agent.registered':   { icon: '&#9881;', color: 'blue',   label: 'Agent Registered',   category: 'agent' },
+  'deploy.started':     { icon: '&#9650;', color: 'blue',   label: 'Deploy Started',     category: 'deploy' },
+  'deploy.completed':   { icon: '&#10003;', color: 'green',  label: 'Deploy Completed',   category: 'deploy' },
+  'task.routed':        { icon: '&#10132;', color: 'blue',   label: 'Task Routed',        category: 'routing' },
+  'routing.fallback':   { icon: '&#9888;', color: 'amber',  label: 'Routing Fallback',   category: 'routing' },
+  'anomaly.detected':   { icon: '&#9888;', color: 'red',    label: 'Anomaly Detected',   category: 'alert' },
+};
+
+function getEventConfig(eventType) {
+  return EVENT_TYPE_CONFIG[eventType] || { icon: '&#9679;', color: 'blue', label: eventType || 'Event', category: 'other' };
+}
+
+function eventCardClass(eventType) {
+  const cfg = getEventConfig(eventType);
+  if (cfg.color === 'green') return 'event-success';
+  if (cfg.color === 'red') return 'event-failure';
+  if (cfg.color === 'amber') return 'event-warning';
+  if (cfg.color === 'purple') return 'event-new';
+  return 'event-info';
+}
+
+function relativeTime(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 5) return 'just now';
+  if (diffSec < 60) return diffSec + 's ago';
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return diffMin + 'm ago';
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return diffHr + 'h ago';
+  return Math.floor(diffHr / 24) + 'd ago';
+}
+
+function renderEventCard(ev) {
+  const cfg = getEventConfig(ev.event_type);
+  const desc = ev.description || '';
+  const agentId = ev.agent_id ? truncateId(ev.agent_id) : null;
+  const meta = ev.metadata || {};
+  const metaParts = [];
+  if (agentId) metaParts.push(`<span class="mono" title="${escapeHtml(ev.agent_id || '')}">Agent ${escapeHtml(agentId)}</span>`);
+  if (meta.run_id) metaParts.push(`<span class="mono">Run ${escapeHtml(truncateId(meta.run_id))}</span>`);
+  if (meta.goal_id) metaParts.push(`<span class="mono">Goal ${escapeHtml(truncateId(meta.goal_id))}</span>`);
+  if (meta.stage) metaParts.push(`<span>${escapeHtml(meta.stage)}</span>`);
+
+  return `<div class="event-card ${eventCardClass(ev.event_type)}">
+    <div class="event-icon ${cfg.color}">${cfg.icon}</div>
+    <div class="event-body">
+      <div class="event-title">${escapeHtml(cfg.label)}</div>
+      ${desc ? `<div class="event-desc">${escapeHtml(desc)}</div>` : ''}
+      ${metaParts.length > 0 ? `<div class="event-meta">${metaParts.join('<span style="color:var(--border)">|</span>')}</div>` : ''}
+    </div>
+    <div class="event-timestamp" data-ts="${escapeHtml(ev.timestamp || '')}">${relativeTime(ev.timestamp)}</div>
+  </div>`;
+}
+
+function filteredEvents() {
+  if (activityFilter === 'all') return activityEvents;
+  return activityEvents.filter(ev => {
+    const cfg = getEventConfig(ev.event_type);
+    return cfg.category === activityFilter;
+  });
+}
+
+function renderEventStream() {
+  const container = document.getElementById('event-stream');
+  if (!container) return;
+  const events = filteredEvents();
+  const countEl = document.getElementById('activity-event-count');
+  if (countEl) countEl.textContent = events.length + ' events';
+  if (events.length === 0) {
+    container.innerHTML = `<div class="empty-state" style="padding:2rem">
+      <div class="empty-state-icon" style="font-size:1.5rem">&#9473;</div>
+      <div class="empty-state-text">No activity events yet. Events will appear here as agents work.</div>
+    </div>`;
+    return;
+  }
+  // Show newest first
+  const reversed = [...events].reverse();
+  container.innerHTML = reversed.map(renderEventCard).join('');
+}
+
+function setActivityFilter(filter) {
+  activityFilter = filter;
+  document.querySelectorAll('.filter-pill').forEach(p => {
+    p.classList.toggle('active', p.dataset.filter === filter);
+  });
+  renderEventStream();
+}
+
+function updateActivityTimestamps() {
+  document.querySelectorAll('.event-timestamp[data-ts]').forEach(el => {
+    const ts = el.getAttribute('data-ts');
+    if (ts) el.textContent = relativeTime(ts);
+  });
+}
+
+// System pulse heartbeat canvas
+function initPulseCanvas() {
+  pulseCanvas = document.getElementById('pulse-canvas');
+  if (!pulseCanvas) return;
+  pulseCtx = pulseCanvas.getContext('2d');
+  pulseData = [];
+  drawPulse();
+}
+
+function addPulsePoint(type) {
+  const height = type === 'success' ? 0.8 : type === 'failure' ? 1.0 : type === 'warning' ? 0.6 : 0.3;
+  const color = type === 'success' ? '#22c55e' : type === 'failure' ? '#ef4444' : type === 'warning' ? '#f59e0b' : '#3b82f6';
+  pulseData.push({ height, color, x: Date.now() });
+  if (pulseData.length > 200) pulseData.shift();
+}
+
+function drawPulse() {
+  if (!pulseCanvas || !pulseCtx) return;
+  const w = pulseCanvas.width = pulseCanvas.offsetWidth * 2;
+  const h = pulseCanvas.height = pulseCanvas.offsetHeight * 2;
+  pulseCtx.clearRect(0, 0, w, h);
+
+  if (pulseData.length < 2) {
+    // Draw flat line
+    pulseCtx.strokeStyle = '#334155';
+    pulseCtx.lineWidth = 2;
+    pulseCtx.beginPath();
+    pulseCtx.moveTo(0, h / 2);
+    pulseCtx.lineTo(w, h / 2);
+    pulseCtx.stroke();
+    pulseAnimFrame = requestAnimationFrame(drawPulse);
+    return;
+  }
+
+  const now = Date.now();
+  const windowMs = 60000; // 60 second window
+  pulseCtx.lineWidth = 2;
+
+  // Draw baseline
+  pulseCtx.strokeStyle = '#1e293b';
+  pulseCtx.beginPath();
+  pulseCtx.moveTo(0, h / 2);
+  pulseCtx.lineTo(w, h / 2);
+  pulseCtx.stroke();
+
+  // Draw pulse points
+  for (const point of pulseData) {
+    const age = now - point.x;
+    if (age > windowMs) continue;
+    const x = w - (age / windowMs) * w;
+    const peakH = point.height * (h / 2 - 4);
+    const alpha = Math.max(0.2, 1 - age / windowMs);
+
+    pulseCtx.strokeStyle = point.color;
+    pulseCtx.globalAlpha = alpha;
+    pulseCtx.lineWidth = 2;
+    pulseCtx.beginPath();
+
+    // Draw spike
+    const spikeWidth = 12;
+    pulseCtx.moveTo(x - spikeWidth, h / 2);
+    pulseCtx.lineTo(x - spikeWidth / 3, h / 2 + peakH * 0.3);
+    pulseCtx.lineTo(x, h / 2 - peakH);
+    pulseCtx.lineTo(x + spikeWidth / 3, h / 2 + peakH * 0.2);
+    pulseCtx.lineTo(x + spikeWidth, h / 2);
+    pulseCtx.stroke();
+  }
+  pulseCtx.globalAlpha = 1;
+
+  pulseAnimFrame = requestAnimationFrame(drawPulse);
+}
+
+function stopPulse() {
+  if (pulseAnimFrame) {
+    cancelAnimationFrame(pulseAnimFrame);
+    pulseAnimFrame = null;
+  }
+}
+
+async function renderAgentLanes() {
+  const container = document.getElementById('agent-lanes');
+  if (!container) return;
+  try {
+    const agents = await api.get('/agents');
+    if (!agents || agents.length === 0) {
+      container.innerHTML = `<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.85rem">No agents registered</div>`;
+      return;
+    }
+    const stages = ['INTENT', 'SANDBOX', 'VALIDATE', 'TRUST', 'DEPLOY'];
+    const avatarColors = ['blue', 'green', 'purple', 'amber', 'red'];
+    container.innerHTML = agents.slice(0, 8).map((agent, idx) => {
+      const name = agent.name || agent.agent_id?.substring(0, 8) || 'Agent';
+      const initial = name.charAt(0).toUpperCase();
+      const colorVar = avatarColors[idx % avatarColors.length];
+      const status = (agent.status || 'idle').toLowerCase();
+      const statusCls = status === 'active' || status === 'working' ? 'working' :
+                        status === 'waiting' ? 'waiting' :
+                        status === 'error' ? 'error' : 'idle';
+      // Find the agent's current pipeline stage from recent events
+      const agentEvents = activityEvents.filter(e => e.agent_id === agent.agent_id);
+      const latestPipeline = agentEvents.find(e => e.event_type?.startsWith('pipeline.'));
+      let activeStageIdx = -1;
+      let stageFailed = false;
+      if (latestPipeline) {
+        const meta = latestPipeline.metadata || {};
+        const stageMap = { 'intent': 0, 'sandbox': 1, 'validation': 2, 'validate': 2, 'trust_routing': 3, 'trust': 3, 'deploy': 4 };
+        activeStageIdx = stageMap[(meta.stage || '').toLowerCase()] ?? -1;
+        stageFailed = latestPipeline.event_type === 'pipeline.failed';
+      }
+      const stagesHtml = stages.map((s, si) => {
+        let cls = 'idle';
+        if (activeStageIdx >= 0) {
+          if (si < activeStageIdx) cls = 'done';
+          else if (si === activeStageIdx) cls = stageFailed ? 'fail' : 'active';
+        }
+        return `<div class="lane-stage ${cls}">${s}</div>`;
+      }).join('');
+
+      return `<div class="agent-lane">
+        <div class="agent-lane-avatar" style="background:var(--${colorVar}-dim);color:var(--${colorVar})">${escapeHtml(initial)}</div>
+        <div class="agent-lane-name">${escapeHtml(name)}</div>
+        <div class="agent-lane-pipeline">${stagesHtml}</div>
+        <div class="agent-lane-status ${statusCls}">${escapeHtml(statusCls)}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    container.innerHTML = `<div style="text-align:center;padding:1rem;color:var(--text-muted);font-size:0.85rem">Could not load agents</div>`;
+  }
+}
+
+async function renderActivity() {
+  stopPulse();
+  app.innerHTML = `
+    <div class="section-header">
+      <h1 class="section-title">Activity</h1>
+      <div style="display:flex;align-items:center;gap:0.75rem">
+        <div class="activity-live-dot"></div>
+        <span style="color:var(--text-muted);font-size:0.85rem">Auto-refreshes every 5s</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadActivityData()">Refresh</button>
+      </div>
+    </div>
+    <div id="activity-content">
+      <div class="loading-state"><div class="spinner spinner-lg"></div><span>Loading...</span></div>
+    </div>
+  `;
+  await loadActivityData();
+  // Auto-refresh while on this page
+  if (window._activityInterval) clearInterval(window._activityInterval);
+  window._activityInterval = setInterval(() => {
+    if (currentPage === 'activity') loadActivityData();
+    else clearInterval(window._activityInterval);
+  }, 5000);
+}
+
+async function loadActivityData() {
+  const container = document.getElementById('activity-content');
+  if (!container) return;
+  try {
+    const [agents, runs, goals, events] = await Promise.all([
+      api.get('/agents'),
+      api.get('/runs'),
+      api.get('/goals'),
+      fetch('/api/activity?limit=30').then(r => r.ok ? r.json() : []),
+    ]);
+
+    // --- Agents overview ---
+    const agentCards = (agents || []).map(a => {
+      const trust = (a.trust_score * 100).toFixed(0);
+      const trustColor = trust >= 70 ? 'var(--green)' : trust >= 30 ? 'var(--yellow)' : 'var(--red)';
+      const agentRuns = (runs || []).filter(r => r.agent_id === a.agent_id);
+      const lastRun = agentRuns.length > 0 ? agentRuns[agentRuns.length - 1] : null;
+      const lastStatus = lastRun ? lastRun.status : 'idle';
+      const statusDot = lastStatus === 'running' ? 'var(--blue)' :
+                        lastStatus === 'blocked' ? 'var(--yellow)' :
+                        lastStatus === 'passed' ? 'var(--green)' :
+                        lastStatus === 'failed' ? 'var(--red)' : 'var(--text-muted)';
+      return `<div style="background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:8px;padding:0.75rem;min-width:180px">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+          <div style="width:8px;height:8px;border-radius:50%;background:${statusDot}"></div>
+          <strong style="font-size:0.9rem">${escapeHtml(a.agent_id)}</strong>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--text-muted)">
+          <span>Trust: <span style="color:${trustColor};font-weight:600">${trust}%</span></span>
+          <span>${a.successful_deployments}/${a.total_deployments} runs</span>
+        </div>
+        ${lastRun ? `<div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.35rem">Last: ${statusBadge(lastStatus)} ${relativeTime(lastRun.started_at || lastRun.created_at)}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    // --- Active/blocked runs ---
+    const activeRuns = (runs || []).filter(r => r.status === 'running' || r.status === 'blocked');
+    const activeRunsHtml = activeRuns.length > 0 ? activeRuns.map(r => {
+      const isBlocked = r.status === 'blocked';
+      return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;background:${isBlocked ? 'rgba(245,158,11,0.08)' : 'rgba(59,130,246,0.08)'};border:1px solid ${isBlocked ? 'var(--yellow)' : 'var(--blue)'};border-radius:8px;margin-bottom:0.5rem">
+        <div style="font-size:1.2rem">${isBlocked ? '&#9888;' : '&#9654;'}</div>
+        <div style="flex:1">
+          <div style="font-weight:500;font-size:0.9rem">${escapeHtml(r.agent_id)}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted)">Stage: ${escapeHtml(r.current_stage || '---')} ${statusBadge(r.status)}</div>
+        </div>
+        ${isBlocked ? `<div style="display:flex;gap:0.35rem">
+          <button class="btn btn-sm btn-success" onclick="showApproveDialog('${r.run_id}')">Approve</button>
+          <button class="btn btn-sm btn-danger" onclick="showRejectDialog('${r.run_id}')">Reject</button>
+        </div>` : `<div class="spinner" style="width:16px;height:16px"></div>`}
+      </div>`;
+    }).join('') : '<div style="color:var(--text-muted);font-size:0.85rem;padding:0.5rem">No active runs</div>';
+
+    // --- Recent completed runs ---
+    const recentRuns = (runs || [])
+      .filter(r => r.status !== 'running' && r.status !== 'blocked')
+      .sort((a, b) => (b.started_at || '').localeCompare(a.started_at || ''))
+      .slice(0, 10);
+    const recentRunsHtml = recentRuns.map(r => {
+      const icon = r.status === 'passed' ? '&#10003;' : r.status === 'failed' ? '&#10007;' : '&#9679;';
+      const color = r.status === 'passed' ? 'var(--green)' : r.status === 'failed' ? 'var(--red)' : 'var(--text-muted)';
+      return `<div style="display:flex;align-items:center;gap:0.6rem;padding:0.4rem 0;border-bottom:1px solid var(--border-subtle);font-size:0.85rem">
+        <span style="color:${color};font-size:1rem;width:1.2rem;text-align:center">${icon}</span>
+        <span style="flex:1;font-weight:500">${escapeHtml(r.agent_id)}</span>
+        ${statusBadge(r.status)}
+        <span style="color:var(--text-muted);font-size:0.8rem">${relativeTime(r.started_at || r.created_at)}</span>
+      </div>`;
+    }).join('') || '<div style="color:var(--text-muted);font-size:0.85rem">No runs yet</div>';
+
+    // --- Event timeline ---
+    const timelineHtml = (events || []).reverse().map(ev => {
+      const cfg = getEventConfig(ev.event_type);
+      const meta = ev.metadata || {};
+      let desc = cfg.label;
+      if (meta.title) desc += `: ${meta.title}`;
+      if (ev.agent_id) desc += ` (${ev.agent_id})`;
+      const color = cfg.color === 'green' ? 'var(--green)' : cfg.color === 'red' ? 'var(--red)' :
+                    cfg.color === 'amber' ? 'var(--yellow)' : cfg.color === 'purple' ? 'var(--blue)' : 'var(--text-muted)';
+      return `<div style="display:flex;align-items:flex-start;gap:0.6rem;padding:0.35rem 0;font-size:0.85rem">
+        <span style="color:${color};margin-top:0.1rem">${cfg.icon}</span>
+        <span style="flex:1">${escapeHtml(desc)}</span>
+        <span style="color:var(--text-muted);font-size:0.75rem;white-space:nowrap">${relativeTime(ev.timestamp)}</span>
+      </div>`;
+    }).join('') || '<div style="color:var(--text-muted)">No events yet</div>';
+
+    // --- Tasks waiting ---
+    const pendingTasks = [];
+    for (const g of (goals || [])) {
+      if (g.status !== 'active' && g.status !== 'in_progress') continue;
+      try {
+        const detail = await api.get(`/goals/${g.goal_id}`);
+        for (const t of (detail.tasks || [])) {
+          if (t.status === 'pending') pendingTasks.push(t);
+        }
+      } catch(e) {}
+    }
+    const tasksHtml = pendingTasks.length > 0
+      ? pendingTasks.map(t => `<div style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;border-bottom:1px solid var(--border-subtle);font-size:0.85rem">
+          <span style="color:var(--yellow)">&#9679;</span>
+          <span style="flex:1">${escapeHtml(t.title)}</span>
+          ${statusBadge('pending')}
+        </div>`).join('')
+      : '<div style="color:var(--text-muted);font-size:0.85rem">No pending tasks — all work assigned</div>';
+
+    container.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-bottom:1.5rem">${agentCards}</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Active Runs</span></div>
+          <div class="card-body" style="padding:0.75rem">${activeRunsHtml}</div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Pending Tasks</span></div>
+          <div class="card-body" style="padding:0.75rem">${tasksHtml}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Recent Runs</span></div>
+          <div class="card-body" style="padding:0.75rem">${recentRunsHtml}</div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Event Timeline</span></div>
+          <div class="card-body" style="padding:0.75rem;max-height:300px;overflow-y:auto">${timelineHtml}</div>
+        </div>
+      </div>
+    `;
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-state-text">Error loading activity: ${escapeHtml(e.message)}</div></div>`;
+  }
+}
+
+function clearActivityEvents() {
+  activityEvents = [];
+  pulseData = [];
+  renderEventStream();
+}
+
+function pushActivityEvent(ev) {
+  activityEvents.push(ev);
+  // Keep at most 200 events in memory
+  if (activityEvents.length > 200) activityEvents.shift();
+
+  // Add pulse point
+  const cfg = getEventConfig(ev.event_type);
+  const pType = cfg.color === 'green' ? 'success' : cfg.color === 'red' ? 'failure' : cfg.color === 'amber' ? 'warning' : 'info';
+  addPulsePoint(pType);
+
+  // If activity tab is visible, update the stream
+  if (currentPage === 'activity') {
+    renderEventStream();
+    renderAgentLanes();
+  }
+}
+
+// ===== Navigation helpers =====
+function navigateToGoal(goalId) {
+  navigate('goals');
+  // Wait for goals tab to render, then expand the matching goal row
+  setTimeout(() => {
+    const row = document.querySelector(`tr[data-goal-id="${goalId}"]`);
+    if (row) {
+      row.click();
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 500);
+}
+
+function showAddGoalToMilestone(projectId, milestoneId) {
+  // All user-supplied IDs are UUIDs from our own API, escaped for safety
+  const safeProjectId = escapeHtml(projectId);
+  const safeMilestoneId = escapeHtml(milestoneId);
+  const modalEl = document.getElementById('modal-content');
+  // Build modal using DOM methods with textContent for labels
+  modalEl.textContent = '';
+  const header = document.createElement('div');
+  header.className = 'modal-header';
+  const titleSpan = document.createElement('span');
+  titleSpan.className = 'modal-title';
+  titleSpan.textContent = 'Add Goal to Milestone';
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'modal-close';
+  closeBtn.textContent = '\u00D7';
+  closeBtn.onclick = closeModal;
+  header.appendChild(titleSpan);
+  header.appendChild(closeBtn);
+  modalEl.appendChild(header);
+
+  const body = document.createElement('div');
+  body.className = 'modal-body';
+  body.innerHTML = [
+    '<div class="form-group"><label class="form-label">Title</label>',
+    '<input class="form-input" id="ms-goal-title" placeholder="e.g. Build API endpoints" autofocus></div>',
+    '<div class="form-group"><label class="form-label">Description</label>',
+    '<textarea class="form-textarea" id="ms-goal-desc" placeholder="Describe what this goal achieves..."></textarea></div>',
+    '<div class="form-group"><label class="form-label">Priority</label>',
+    '<select class="form-select" id="ms-goal-priority">',
+    '<option value="low">Low</option><option value="medium" selected>Medium</option>',
+    '<option value="high">High</option><option value="critical">Critical</option>',
+    '</select></div>',
+  ].join('');
+  modalEl.appendChild(body);
+
+  const footer = document.createElement('div');
+  footer.className = 'modal-footer';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'btn btn-ghost';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.onclick = closeModal;
+  const submitBtn = document.createElement('button');
+  submitBtn.className = 'btn btn-primary';
+  submitBtn.textContent = 'Create & Link';
+  submitBtn.onclick = () => submitGoalToMilestone(safeProjectId, safeMilestoneId);
+  footer.appendChild(cancelBtn);
+  footer.appendChild(submitBtn);
+  modalEl.appendChild(footer);
+  setTimeout(() => document.getElementById('ms-goal-title')?.focus(), 100);
+}
+
+async function submitGoalToMilestone(projectId, milestoneId) {
+  const title = document.getElementById('ms-goal-title').value.trim();
+  const description = document.getElementById('ms-goal-desc').value.trim();
+  const priority = document.getElementById('ms-goal-priority').value;
+  if (!title) { toast('Title is required', 'error'); return; }
+  try {
+    await api.post(
+      '/projects/' + encodeURIComponent(projectId) + '/milestones/' + encodeURIComponent(milestoneId) + '/goals',
+      { title, description: description || title, priority }
+    );
+    closeModal();
+    toast('Goal created and linked to milestone', 'success');
+    await loadProjectsList();
+  } catch (e) {
+    toast('Failed: ' + e.message, 'error');
   }
 }
 
@@ -2058,6 +4114,12 @@ function connectWebSocket() {
 
 function handleWsMessage(msg) {
   const type = msg.type || msg.event;
+
+  // Activity feed events from the dispatcher
+  if (type === 'activity' && msg.event_type) {
+    pushActivityEvent(msg);
+  }
+
   if (type === 'pipeline_update' || type === 'run_update') {
     if (currentPage === 'dashboard') renderDashboard();
     if (currentPage === 'pipeline') loadPipelineTable();
@@ -2071,10 +4133,22 @@ function handleWsMessage(msg) {
   } else if (type === 'project_update') {
     if (currentPage === 'projects') loadProjectsList();
   }
+
+  // Agent status live updates (Phase 2)
+  if (msg.event_type === 'agent.status_updated') {
+    if (currentPage === 'dashboard') loadAgentStatusPanel();
+    if (currentPage === 'agents') renderAgents();
+    if (currentPage === 'activity') loadActivityData();
+  }
+  if (msg.event_type === 'lease.expired') {
+    toast('Lease expired — task reset to pending', 'warning');
+    if (currentPage === 'dashboard') renderDashboard();
+  }
 }
 
 // ===== Init =====
-navigate('dashboard');
+const _initPage = location.hash.replace(/^#\/?/, '') || 'dashboard';
+navigate(pages[_initPage] ? _initPage : 'dashboard');
 connectWebSocket();
 </script>
 </body>

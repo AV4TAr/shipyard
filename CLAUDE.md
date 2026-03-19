@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-AI-native CI/CD pipeline where humans are "air traffic controllers" (set goals and constraints) and agents autonomously implement, test, and deploy code. Every change flows through a 5-stage pipeline regardless of which agent made it.
+Shipyard is an AI-native CI/CD pipeline where humans are "air traffic controllers" (set goals and constraints) and agents autonomously implement, test, and deploy code. Every change flows through a 5-stage pipeline regardless of which agent made it.
 
 ## Commands
 

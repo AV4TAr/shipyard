@@ -27,6 +27,8 @@ class AgentCapability(str, enum.Enum):
     DEVOPS = "devops"
     DOCUMENTATION = "documentation"
     FULLSTACK = "fullstack"
+    ARCHITECTURE = "architecture"
+    DESIGN = "design"
     GENERIC = "generic"
 
 

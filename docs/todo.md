@@ -1,4 +1,4 @@
-# AI-CICD TODO
+# Shipyard TODO
 
 ## Recently Built / In Progress
 
@@ -47,7 +47,7 @@ The primary interface between the human operator (air traffic controller) and th
 ## High Priority
 
 - [x] **Agent Selection / Routing** — AgentRegistry, TaskRouter, RoutingBridge wired into CLIRuntime. Weighted scoring (capability 0.35, language 0.20, framework 0.15, trust 0.20, load 0.10). Domain-specific trust. SDK-to-routing bridge. 8 API endpoints, CLI commands (`route`, `agents register`). Persistence (memory + SQLite). Event notifications (TASK_ROUTED, ROUTING_FALLBACK).
-- [x] **Storage Integration** — `src/storage/` repositories wired into GoalManager, TrustTracker, IntentRegistry, PipelineOrchestrator. `CLIRuntime.from_defaults(storage_backend="sqlite", db_path="...")` or `AI_CICD_DB_PATH` env var.
+- [x] **Storage Integration** — `src/storage/` repositories wired into GoalManager, TrustTracker, IntentRegistry, PipelineOrchestrator. `CLIRuntime.from_defaults(storage_backend="sqlite", db_path="...")` or `SHIPYARD_DB_PATH` env var.
 - [x] **LLM Decomposer Integration** — `OPENROUTER_API_KEY` env var auto-selects LLMGoalDecomposer in `CLIRuntime.from_defaults()`, with fallback to rule-based.
 - [x] **Notification Integration** — EventDispatcher wired into GoalManager (goal.created/activated/completed) and PipelineOrchestrator (pipeline.started/failed/passed, approval.needed).
 

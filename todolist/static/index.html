@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Todo</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-void: #080d1a;
+  --bg-primary: #0f172a;
+  --bg-card: #1e293b;
+  --bg-elevated: #253348;
+  --bg-hover: #334155;
+  --border: #334155;
+  --border-dim: #1e293b;
+  --text: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --green: #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.25);
+  --blue: #3b82f6;
+  --blue-glow: rgba(59, 130, 246, 0.2);
+  --red: #ef4444;
+  --red-glow: rgba(239, 68, 68, 0.15);
+  --amber: #f59e0b;
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html { font-size: 15px; }
+
+body {
+  font-family: var(--font-display);
+  background: var(--bg-void);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  top: -40%; left: -20%;
+  width: 80vw; height: 80vw;
+  background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+body::after {
+  content: '';
+  position: fixed;
+  bottom: -30%; right: -15%;
+  width: 70vw; height: 70vw;
+  background: radial-gradient(circle, rgba(34,197,94,0.04) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 560px;
+  padding: 3rem 1.5rem 4rem;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 2.5rem;
+  user-select: none;
+}
+.brand-mark {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--green) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+  box-shadow: 0 0 20px var(--blue-glow);
+}
+.brand-text {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-secondary);
+}
+.brand-text strong { color: var(--text); font-weight: 700; }
+
+.create-view { animation: fadeUp 0.5s ease both; }
+
+.hero-title {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+  margin-bottom: 0.75rem;
+}
+.hero-title .accent { color: var(--blue); }
+
+.hero-sub {
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1.6;
+  margin-bottom: 2.5rem;
+  max-width: 400px;
+}
+
+.create-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.75rem;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+.field-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.field-input {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-glow);
+}
+.field-input::placeholder { color: var(--text-muted); }
+
+.btn-create {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.85rem;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+.btn-create:hover { filter: brightness(1.15); }
+.btn-create:active { transform: scale(0.98); }
+
+.list-view { animation: fadeUp 0.4s ease both; }
+
+.share-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 1.75rem;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.share-bar:hover { border-color: var(--text-muted); }
+.share-bar .url-text {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-bar .copy-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--blue);
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.share-bar.copied .copy-label { color: var(--green); }
+
+.list-title {
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+.list-title .count {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+.add-input {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.add-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-glow);
+}
+.add-input::placeholder { color: var(--text-muted); }
+
+.btn-add {
+  padding: 0 1.1rem;
+  background: var(--blue);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+.btn-add:hover { filter: brightness(1.15); }
+.btn-add:active { transform: scale(0.96); }
+
+.items { display: flex; flex-direction: column; gap: 2px; }
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-card);
+  border-radius: 8px;
+  transition: background 0.15s, transform 0.15s, opacity 0.3s;
+  animation: slideIn 0.25s ease both;
+}
+.item:hover { background: var(--bg-elevated); }
+
+.item-check {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.item-check:hover { border-color: var(--blue); background: var(--blue-glow); }
+.item.done .item-check {
+  border-color: var(--green);
+  background: var(--green);
+}
+.item.done .item-check::after {
+  content: '';
+  width: 6px; height: 10px;
+  border: solid #fff; border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translateY(-1px);
+}
+
+.item-text {
+  flex: 1;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  transition: color 0.2s;
+}
+.item.done .item-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+}
+
+.item-id {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.item:hover .item-id { opacity: 1; }
+
+.btn-delete {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.item:hover .btn-delete { opacity: 1; }
+.btn-delete:hover { background: var(--red-glow); color: var(--red); }
+
+.empty-items {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.empty-items .empty-icon {
+  font-size: 2rem;
+  margin-bottom: 0.75rem;
+  opacity: 0.4;
+}
+
+.progress-strip {
+  height: 3px;
+  background: var(--bg-card);
+  border-radius: 2px;
+  margin-top: 1.5rem;
+  overflow: hidden;
+}
+.progress-strip .fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: var(--text-muted);
+  gap: 0.75rem;
+}
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.error-msg {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--red);
+  font-size: 0.9rem;
+}
+
+.footer {
+  margin-top: 3rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+.footer a { color: var(--text-secondary); text-decoration: none; }
+.footer a:hover { color: var(--text); }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes removeItem {
+  to { opacity: 0; transform: translateX(20px); height: 0; padding: 0; margin: 0; overflow: hidden; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="brand">
+    <div class="brand-mark">T</div>
+    <div class="brand-text"><strong>Todo</strong>&ensp;Lists</div>
+  </div>
+  <div id="app">
+    <div class="loading"><div class="spinner"></div> Loading&hellip;</div>
+  </div>
+  <div class="footer">Built through <a href="/">Shipyard</a></div>
+</div>
+
+<script>
+// All user-supplied text is escaped via esc() before insertion into the DOM.
+// esc() uses the standard textContent-based approach to prevent XSS.
+const app = document.getElementById('app');
+
+function getListId() {
+  const m = location.pathname.match(/^\/lists\/([a-f0-9]+)$/);
+  return m ? m[1] : null;
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch('/api' + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || res.statusText);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function renderCreate() {
+  const view = document.createElement('div');
+  view.className = 'create-view';
+
+  const h1 = document.createElement('h1');
+  h1.className = 'hero-title';
+  h1.innerHTML = 'Share a <span class="accent">todo list</span><br>with anyone.';
+  view.appendChild(h1);
+
+  const sub = document.createElement('p');
+  sub.className = 'hero-sub';
+  sub.textContent = 'Create a list, share the link. No sign-up needed.';
+  view.appendChild(sub);
+
+  const card = document.createElement('div');
+  card.className = 'create-card';
+
+  const label = document.createElement('label');
+  label.className = 'field-label';
+  label.textContent = 'List title';
+  card.appendChild(label);
+
+  const input = document.createElement('input');
+  input.className = 'field-input';
+  input.id = 'new-title';
+  input.placeholder = 'Weekend groceries, sprint tasks, packing list\u2026';
+  input.maxLength = 120;
+  input.autofocus = true;
+  card.appendChild(input);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn-create';
+  btn.textContent = 'Create list \u2192';
+  card.appendChild(btn);
+
+  view.appendChild(card);
+  app.textContent = '';
+  app.appendChild(view);
+
+  async function create() {
+    const title = input.value.trim() || 'My Todo List';
+    btn.textContent = 'Creating\u2026';
+    btn.disabled = true;
+    try {
+      const data = await apiFetch('/lists', {
+        method: 'POST',
+        body: JSON.stringify({ title }),
+      });
+      history.pushState(null, '', '/lists/' + data.list_id);
+      renderList(data.list_id);
+    } catch (e) {
+      btn.textContent = 'Create list \u2192';
+      btn.disabled = false;
+    }
+  }
+  btn.addEventListener('click', create);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') create(); });
+  setTimeout(() => input.focus(), 50);
+}
+
+async function renderList(listId) {
+  app.textContent = '';
+  const loadingDiv = document.createElement('div');
+  loadingDiv.className = 'loading';
+  loadingDiv.innerHTML = '<div class="spinner"></div> Loading\u2026';
+  app.appendChild(loadingDiv);
+
+  let data;
+  try {
+    data = await apiFetch('/lists/' + encodeURIComponent(listId));
+  } catch (e) {
+    app.textContent = '';
+    const errDiv = document.createElement('div');
+    errDiv.className = 'error-msg';
+    errDiv.textContent = 'List not found.';
+    app.appendChild(errDiv);
+    return;
+  }
+
+  const shareUrl = location.origin + '/lists/' + listId;
+
+  function render() {
+    const total = data.items.length;
+    const done = data.items.filter(i => i.done).length;
+    const pct = total > 0 ? (done / total * 100) : 0;
+
+    // Build the view using DOM for structure, esc() for all user text
+    const view = document.createElement('div');
+    view.className = 'list-view';
+
+    // Share bar
+    const shareBar = document.createElement('div');
+    shareBar.className = 'share-bar';
+    shareBar.title = 'Click to copy link';
+    const urlSpan = document.createElement('span');
+    urlSpan.className = 'url-text';
+    urlSpan.textContent = shareUrl;
+    const copySpan = document.createElement('span');
+    copySpan.className = 'copy-label';
+    copySpan.textContent = 'Copy link';
+    shareBar.appendChild(urlSpan);
+    shareBar.appendChild(copySpan);
+    shareBar.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        shareBar.classList.add('copied');
+        copySpan.textContent = 'Copied!';
+        setTimeout(() => {
+          shareBar.classList.remove('copied');
+          copySpan.textContent = 'Copy link';
+        }, 2000);
+      } catch(e) {}
+    });
+    view.appendChild(shareBar);
+
+    // Title
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'list-title';
+    const titleText = document.createTextNode(data.title);
+    titleDiv.appendChild(titleText);
+    const countSpan = document.createElement('span');
+    countSpan.className = 'count';
+    countSpan.textContent = done + '/' + total;
+    titleDiv.appendChild(countSpan);
+    view.appendChild(titleDiv);
+
+    // Add row
+    const addRow = document.createElement('div');
+    addRow.className = 'add-row';
+    const addInput = document.createElement('input');
+    addInput.className = 'add-input';
+    addInput.placeholder = 'Add a new item\u2026';
+    addInput.maxLength = 500;
+    const addBtn = document.createElement('button');
+    addBtn.className = 'btn-add';
+    addBtn.textContent = 'Add';
+    addRow.appendChild(addInput);
+    addRow.appendChild(addBtn);
+    view.appendChild(addRow);
+
+    async function addItem() {
+      const text = addInput.value.trim();
+      if (!text) return;
+      addInput.value = '';
+      try {
+        const item = await apiFetch('/lists/' + encodeURIComponent(listId) + '/items', {
+          method: 'POST',
+          body: JSON.stringify({ text }),
+        });
+        data.items.push(item);
+        render();
+      } catch(e) {}
+    }
+    addBtn.addEventListener('click', addItem);
+    addInput.addEventListener('keydown', e => { if (e.key === 'Enter') addItem(); });
+
+    // Items
+    const itemsDiv = document.createElement('div');
+    itemsDiv.className = 'items';
+
+    if (data.items.length === 0) {
+      const emptyDiv = document.createElement('div');
+      emptyDiv.className = 'empty-items';
+      const emptyIcon = document.createElement('div');
+      emptyIcon.className = 'empty-icon';
+      emptyIcon.textContent = '\u2610';
+      const emptyText = document.createElement('div');
+      emptyText.textContent = 'No items yet. Add one above.';
+      emptyDiv.appendChild(emptyIcon);
+      emptyDiv.appendChild(emptyText);
+      itemsDiv.appendChild(emptyDiv);
+    } else {
+      data.items.forEach((item, i) => {
+        const row = document.createElement('div');
+        row.className = 'item' + (item.done ? ' done' : '');
+        row.dataset.id = item.id;
+        row.style.animationDelay = (i * 30) + 'ms';
+
+        const check = document.createElement('div');
+        check.className = 'item-check';
+        check.addEventListener('click', async () => {
+          try {
+            const updated = await apiFetch('/lists/' + encodeURIComponent(listId) + '/items/' + item.id, { method: 'PATCH' });
+            const idx = data.items.findIndex(x => x.id === item.id);
+            if (idx !== -1) data.items[idx] = updated;
+            render();
+          } catch(e) {}
+        });
+
+        const textSpan = document.createElement('span');
+        textSpan.className = 'item-text';
+        textSpan.textContent = item.text;
+
+        const idSpan = document.createElement('span');
+        idSpan.className = 'item-id';
+        idSpan.textContent = '#' + item.id;
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-delete';
+        delBtn.title = 'Delete';
+        delBtn.textContent = '\u00D7';
+        delBtn.addEventListener('click', () => {
+          row.style.animation = 'removeItem 0.25s ease forwards';
+          setTimeout(async () => {
+            try {
+              await apiFetch('/lists/' + encodeURIComponent(listId) + '/items/' + item.id, { method: 'DELETE' });
+              data.items = data.items.filter(x => x.id !== item.id);
+              render();
+            } catch(e) {}
+          }, 200);
+        });
+
+        row.appendChild(check);
+        row.appendChild(textSpan);
+        row.appendChild(idSpan);
+        row.appendChild(delBtn);
+        itemsDiv.appendChild(row);
+      });
+    }
+    view.appendChild(itemsDiv);
+
+    // Progress bar
+    if (total > 0) {
+      const strip = document.createElement('div');
+      strip.className = 'progress-strip';
+      const fill = document.createElement('div');
+      fill.className = 'fill';
+      fill.style.width = pct + '%';
+      strip.appendChild(fill);
+      view.appendChild(strip);
+    }
+
+    app.textContent = '';
+    app.appendChild(view);
+    setTimeout(() => addInput.focus(), 50);
+  }
+
+  render();
+}
+
+// Init
+const listId = getListId();
+if (listId) {
+  renderList(listId);
+} else {
+  renderCreate();
+}
+
+window.addEventListener('popstate', () => {
+  const id = getListId();
+  if (id) renderList(id);
+  else renderCreate();
+});
+</script>
+</body>
+</html>

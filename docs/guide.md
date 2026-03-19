@@ -63,7 +63,7 @@ The system that matches tasks to the best available agent using weighted scoring
 uvicorn src.api.app:create_app --factory --host 0.0.0.0 --port 8001
 ```
 
-This starts the Shipyard API server with the Command Center web UI. If you have `OPENROUTER_API_KEY` set in your environment, LLM-powered goal decomposition is automatically enabled. If you set `AI_CICD_DB_PATH`, data persists to SQLite; otherwise it runs in-memory.
+This starts the Shipyard API server with the Command Center web UI. If you have `OPENROUTER_API_KEY` set in your environment, LLM-powered goal decomposition is automatically enabled. If you set `SHIPYARD_DB_PATH`, data persists to SQLite; otherwise it runs in-memory.
 
 ### b. Open the Command Center
 
@@ -490,7 +490,7 @@ trust:
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `AI_CICD_DB_PATH` | Path to SQLite database for persistent storage | In-memory (no persistence) |
+| `SHIPYARD_DB_PATH` | Path to SQLite database for persistent storage | In-memory (no persistence) |
 | `OPENROUTER_API_KEY` | Enables LLM-powered goal decomposition and intent alignment | Rule-based fallback |
 | `OPENSANDBOX_SERVER_URL` | URL of an OpenSandbox server for real sandboxed execution | Simulated sandbox |
 
@@ -585,7 +585,7 @@ Shipyard is a working system, but some components are fully integrated and other
 
 ### Real and working today
 
-- **Persistent storage** -- SQLite backend with the repository pattern. Set `AI_CICD_DB_PATH` to persist data across restarts.
+- **Persistent storage** -- SQLite backend with the repository pattern. Set `SHIPYARD_DB_PATH` to persist data across restarts.
 - **LLM goal decomposition** -- When `OPENROUTER_API_KEY` is set, goals are decomposed using an LLM (via OpenRouter) with a rule-based fallback.
 - **Static analysis** -- Uses `ruff` for real Python linting with JSON output and severity mapping.
 - **Security scanning** -- Uses `bandit` for real security vulnerability detection with severity mapping.

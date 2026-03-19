@@ -241,7 +241,7 @@ def format_status_dashboard(data: dict[str, Any]) -> str:
     lines: list[str] = []
 
     lines.append(f"{c.BOLD}{c.CYAN}{'=' * 50}{c.RESET}")
-    lines.append(f"{c.BOLD}{c.CYAN}  AI-CICD Status Dashboard{c.RESET}")
+    lines.append(f"{c.BOLD}{c.CYAN}  Shipyard Status Dashboard{c.RESET}")
     lines.append(f"{c.BOLD}{c.CYAN}{'=' * 50}{c.RESET}")
     lines.append("")
 

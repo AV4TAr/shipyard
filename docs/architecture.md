@@ -1,4 +1,4 @@
-# AI-CICD Architecture
+# Shipyard Architecture
 
 > CI/CD reimagined for AI agents. The human is the air traffic controller, not the pilot.
 

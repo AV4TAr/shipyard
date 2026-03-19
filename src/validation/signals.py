@@ -81,12 +81,38 @@ class StaticAnalysisRunner(ValidationSignalRunner):
 
 
 class BehavioralDiffRunner(ValidationSignalRunner):
-    """Simulates comparing application behaviour before and after the change."""
+    """Compares application behaviour before and after the change.
 
-    def __init__(self, *, force_pass: Optional[bool] = None) -> None:
+    When a ``worktree_manager`` is provided the runner delegates to
+    :class:`~src.validation.real_runners.RealBehavioralDiffRunner` for
+    actual before/after test diffing.  Otherwise it falls back to the
+    simulated mode that reads ``sandbox_result["behavioral_diffs"]``.
+    """
+
+    def __init__(
+        self,
+        *,
+        force_pass: Optional[bool] = None,
+        worktree_manager: Any = None,
+    ) -> None:
         self.force_pass = force_pass
+        self.worktree_manager = worktree_manager
+        self._real_runner: Optional[Any] = None
+        if worktree_manager is not None:
+            from .real_runners import RealBehavioralDiffRunner
+
+            self._real_runner = RealBehavioralDiffRunner(
+                worktree_manager=worktree_manager,
+                force_pass=force_pass,
+            )
 
     def run(self, intent_id: str, sandbox_result: dict[str, Any]) -> SignalResult:
+        # Delegate to the real runner when a worktree path is present
+        worktree_path = sandbox_result.get("worktree_path")
+        if worktree_path and self._real_runner is not None:
+            return self._real_runner.run(intent_id, sandbox_result)
+
+        # --- Simulated fallback ---
         start = time.monotonic()
         findings: list[Finding] = []
 

@@ -11,7 +11,7 @@ from src.cli.runtime import CLIRuntime
 def _get_runtime() -> CLIRuntime:
     """Return a singleton CLIRuntime instance.
 
-    Respects the ``AI_CICD_DB_PATH`` environment variable for SQLite
+    Respects the ``SHIPYARD_DB_PATH`` environment variable for SQLite
     persistence.  Without it, the default in-memory backend is used.
     """
     return CLIRuntime.from_defaults()

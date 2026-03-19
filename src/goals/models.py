@@ -111,6 +111,15 @@ class AgentTask(BaseModel):
     estimated_risk: RiskLevel = RiskLevel.LOW
     status: TaskStatus = TaskStatus.PENDING
 
+    # Lease fields (set when claimed via LeaseManager)
+    claimed_by: Optional[str] = None
+    claimed_at: Optional[datetime] = None
+    lease_expires_at: Optional[datetime] = None
+
+    # Worktree fields (set when project has a repo_url)
+    worktree_path: Optional[str] = None
+    branch_name: Optional[str] = None
+
 
 class TaskBreakdown(BaseModel):
     """How a goal gets decomposed into agent-sized work."""

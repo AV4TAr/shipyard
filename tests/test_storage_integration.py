@@ -193,7 +193,7 @@ class TestCLIRuntimeFromDefaults:
 
     def test_env_var_triggers_sqlite(self, monkeypatch, tmp_path):
         db = str(tmp_path / "env.db")
-        monkeypatch.setenv("AI_CICD_DB_PATH", db)
+        monkeypatch.setenv("SHIPYARD_DB_PATH", db)
         runtime = CLIRuntime.from_defaults()
         # Should not raise — sqlite backend is used
         goal = runtime.create_goal(title="Env goal", description="from env")

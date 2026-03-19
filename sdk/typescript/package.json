@@ -1,0 +1,38 @@
+{
+  "name": "@shipyard/sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for building agents that plug into the Shipyard pipeline",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "typescript": "^5.4.0"
+  },
+  "keywords": [
+    "shipyard",
+    "shipyard",
+    "agent",
+    "pipeline",
+    "sdk"
+  ],
+  "license": "MIT"
+}

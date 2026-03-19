@@ -42,6 +42,11 @@ CREATE TABLE IF NOT EXISTS agent_registrations (
     agent_id TEXT PRIMARY KEY,
     data TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    status TEXT,
+    data TEXT NOT NULL
+);
 """
 
 
@@ -49,7 +54,10 @@ def _connect(db_path: str) -> sqlite3.Connection:
     """Create a connection and ensure tables exist."""
     path = Path(db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), check_same_thread=False, timeout=30)
+    # WAL mode allows concurrent reads while writing
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     conn.executescript(_SCHEMA)
     return conn
 
@@ -252,5 +260,46 @@ class SqliteAgentRegistrationRepository:
         self._conn.execute(
             "DELETE FROM agent_registrations WHERE agent_id = ?",
             (agent_id,),
+        )
+        self._conn.commit()
+
+
+class SqliteProjectRepository:
+    """SQLite-backed Project repository."""
+
+    def __init__(self, db_path: str) -> None:
+        self._db_path = db_path
+        self._conn = _connect(db_path)
+
+    def save(self, project: object) -> None:
+        self._conn.execute(
+            "INSERT OR REPLACE INTO projects (id, status, data) VALUES (?, ?, ?)",
+            (str(project.project_id), project.status.value,  # type: ignore[attr-defined]
+             project.model_dump_json()),  # type: ignore[attr-defined]
+        )
+        self._conn.commit()
+
+    def get(self, project_id: uuid.UUID) -> object | None:
+        from src.projects.models import Project
+        row = self._conn.execute(
+            "SELECT data FROM projects WHERE id = ?", (str(project_id),)
+        ).fetchone()
+        if row is None:
+            return None
+        return Project.model_validate_json(row[0])
+
+    def list_all(self, status: str | None = None) -> list:
+        from src.projects.models import Project
+        if status is not None:
+            rows = self._conn.execute(
+                "SELECT data FROM projects WHERE status = ?", (status,)
+            ).fetchall()
+        else:
+            rows = self._conn.execute("SELECT data FROM projects").fetchall()
+        return [Project.model_validate_json(r[0]) for r in rows]
+
+    def delete(self, project_id: uuid.UUID) -> None:
+        self._conn.execute(
+            "DELETE FROM projects WHERE id = ?", (str(project_id),)
         )
         self._conn.commit()

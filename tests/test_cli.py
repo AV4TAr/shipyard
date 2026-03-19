@@ -369,7 +369,7 @@ class TestFormatStatusDashboard:
             "deploy_queue_length": 1,
         }
         result = format_status_dashboard(data)
-        assert "AI-CICD Status Dashboard" in result
+        assert "Shipyard Status Dashboard" in result
         assert "3" in result   # active goals
         assert "Goals" in result
         assert "Pipeline" in result
@@ -386,7 +386,7 @@ class TestFormatStatusDashboard:
             "deploy_queue_length": 0,
         }
         result = format_status_dashboard(data)
-        assert "AI-CICD Status Dashboard" in result
+        assert "Shipyard Status Dashboard" in result
 
 
 # ===========================================================================

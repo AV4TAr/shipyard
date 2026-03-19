@@ -1,8 +1,9 @@
-"""WebSocket endpoint for real-time events."""
+"""WebSocket endpoint for real-time events and activity feed REST endpoint."""
 
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -20,14 +21,44 @@ class ConnectionManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket) -> None:
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def broadcast(self, message: dict) -> None:
+        dead: list[WebSocket] = []
         for connection in self.active_connections:
-            await connection.send_json(message)
+            try:
+                await connection.send_json(message)
+            except Exception:
+                dead.append(connection)
+        for conn in dead:
+            self.disconnect(conn)
 
 
 manager = ConnectionManager()
+
+# The dispatcher is wired in by the app factory via ``set_dispatcher``.
+_dispatcher: Any = None
+
+
+def set_dispatcher(dispatcher: Any) -> None:
+    """Called once at startup to wire the EventDispatcher into this module."""
+    global _dispatcher  # noqa: PLW0603
+    _dispatcher = dispatcher
+    dispatcher.add_live_listener(_broadcast_event)
+
+
+async def _broadcast_event(event_dict: dict[str, Any]) -> None:
+    """Live-listener callback: relay every dispatched event to WS clients."""
+    await manager.broadcast(event_dict)
+
+
+@router.get("/api/activity")
+def get_activity(limit: int = 50) -> list[dict[str, Any]]:
+    """Return the most recent activity events for initial page load."""
+    if _dispatcher is None:
+        return []
+    return _dispatcher.get_recent_events(min(limit, 200))
 
 
 @router.websocket("/api/ws")

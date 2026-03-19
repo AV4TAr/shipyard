@@ -1,11 +1,12 @@
-"""ProjectManager — in-memory project and milestone lifecycle management."""
+"""ProjectManager — project and milestone lifecycle management with optional persistence."""
 
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from src.goals.manager import GoalManager
-from src.goals.models import GoalInput
+from src.goals.models import GoalInput, GoalStatus
 
 from .models import (
     Milestone,
@@ -31,14 +32,24 @@ _VALID_TRANSITIONS: dict[ProjectStatus, set[ProjectStatus]] = {
 
 
 class ProjectManager:
-    """Creates, stores, and manages :class:`Project` and :class:`Milestone` lifecycles.
+    """Creates, stores, and manages :class:`Project` and :class:`Milestone` lifecycles."""
 
-    All state is kept in-memory (dicts keyed by ID).
-    """
-
-    def __init__(self, goal_manager: GoalManager | None = None) -> None:
+    def __init__(
+        self,
+        goal_manager: GoalManager | None = None,
+        *,
+        project_repo: Any | None = None,
+    ) -> None:
         self._projects: dict[uuid.UUID, Project] = {}
         self._goal_manager = goal_manager
+        self._project_repo = project_repo
+
+    def _save_project(self, project: Project) -> None:
+        """Persist project to repo or in-memory dict."""
+        if self._project_repo is not None:
+            self._project_repo.save(project)
+        else:
+            self._projects[project.project_id] = project
 
     # ------------------------------------------------------------------
     # Project CRUD
@@ -55,7 +66,7 @@ class ProjectManager:
             tags=list(input.tags),
             created_by=created_by,
         )
-        self._projects[project.project_id] = project
+        self._save_project(project)
         return project
 
     def get(self, project_id: uuid.UUID) -> Project:
@@ -64,6 +75,11 @@ class ProjectManager:
         Raises:
             KeyError: If the project does not exist.
         """
+        if self._project_repo is not None:
+            project = self._project_repo.get(project_id)
+            if project is None:
+                raise KeyError(f"Project {project_id} not found")
+            return project
         try:
             return self._projects[project_id]
         except KeyError:
@@ -71,14 +87,90 @@ class ProjectManager:
 
     def list_projects(self, status: ProjectStatus | None = None) -> list[Project]:
         """List all projects, optionally filtered by status."""
+        if self._project_repo is not None:
+            return self._project_repo.list_all(
+                status=status.value if status is not None else None
+            )
         results = list(self._projects.values())
         if status is not None:
             results = [p for p in results if p.status == status]
         return results
 
+    def update(
+        self,
+        project_id: uuid.UUID,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+        priority: str | None = None,
+    ) -> Project:
+        """Update editable fields on a draft or planning project.
+
+        Raises:
+            KeyError: If the project does not exist.
+            ValueError: If the project is already active/completed/cancelled.
+        """
+        project = self.get(project_id)
+        if project.status not in (ProjectStatus.DRAFT, ProjectStatus.PLANNING):
+            raise ValueError(
+                f"Cannot edit project in {project.status.value} status"
+            )
+        if title is not None:
+            project.title = title
+        if description is not None:
+            project.description = description
+        if priority is not None:
+            from src.projects.models import ProjectPriority
+            project.priority = ProjectPriority(priority)
+        self._save_project(project)
+        return project
+
     # ------------------------------------------------------------------
     # Milestone management
     # ------------------------------------------------------------------
+
+    def update_milestone(
+        self,
+        project_id: uuid.UUID,
+        milestone_id: uuid.UUID,
+        *,
+        title: str | None = None,
+        description: str | None = None,
+    ) -> Milestone:
+        """Update a milestone's title or description.
+
+        Raises:
+            KeyError: If the project or milestone does not exist.
+            ValueError: If the project is not in draft/planning status.
+        """
+        project = self.get(project_id)
+        if project.status not in (ProjectStatus.DRAFT, ProjectStatus.PLANNING):
+            raise ValueError("Cannot edit milestones on an active project")
+        milestone = self._get_milestone(project, milestone_id)
+        if title is not None:
+            milestone.title = title
+        if description is not None:
+            milestone.description = description
+        self._save_project(project)
+        return milestone
+
+    def remove_milestone(
+        self,
+        project_id: uuid.UUID,
+        milestone_id: uuid.UUID,
+    ) -> None:
+        """Remove a milestone from a draft/planning project.
+
+        Raises:
+            KeyError: If the project or milestone does not exist.
+            ValueError: If the project is not in draft/planning status.
+        """
+        project = self.get(project_id)
+        if project.status not in (ProjectStatus.DRAFT, ProjectStatus.PLANNING):
+            raise ValueError("Cannot remove milestones from an active project")
+        milestone = self._get_milestone(project, milestone_id)
+        project.milestones.remove(milestone)
+        self._save_project(project)
 
     def add_milestone(
         self,
@@ -110,6 +202,7 @@ class ProjectManager:
         project.milestones.append(milestone)
         # Keep milestones sorted by order
         project.milestones.sort(key=lambda m: m.order)
+        self._save_project(project)
         return milestone
 
     # ------------------------------------------------------------------
@@ -130,6 +223,7 @@ class ProjectManager:
                 f"to {target.value}"
             )
         project.status = target
+        self._save_project(project)
         return project
 
     def plan(self, project_id: uuid.UUID) -> Project:
@@ -160,6 +254,7 @@ class ProjectManager:
         # Activate the first pending milestone
         self._activate_milestone(project, self._first_pending(project))
 
+        self._save_project(project)
         return project
 
     def activate_next_milestone(
@@ -177,6 +272,7 @@ class ProjectManager:
         if milestone is None:
             return None
         self._activate_milestone(project, milestone)
+        self._save_project(project)
         return milestone
 
     def complete_milestone(
@@ -211,6 +307,7 @@ class ProjectManager:
             if all_completed:
                 project.status = ProjectStatus.COMPLETED
 
+        self._save_project(project)
         return milestone
 
     def cancel(self, project_id: uuid.UUID) -> Project:
@@ -267,6 +364,52 @@ class ProjectManager:
             "total_goals": len(all_goal_ids),
         }
 
+    def goal_project_map(self) -> dict[str, dict]:
+        """Return a mapping of goal_id -> {project_id, project_title, milestone_title}.
+
+        Iterates all projects and their milestones to build the reverse lookup.
+        """
+        result: dict[str, dict] = {}
+        all_projects = self.list_projects()
+        for project in all_projects:
+            for milestone in project.milestones:
+                for gid in milestone.goal_ids:
+                    result[str(gid)] = {
+                        "project_id": str(project.project_id),
+                        "project_title": project.title,
+                        "milestone_title": milestone.title,
+                    }
+        return result
+
+    # ------------------------------------------------------------------
+    # Auto-cascade: goal completion → milestone completion
+    # ------------------------------------------------------------------
+
+    def on_goal_completed(self, goal_id: uuid.UUID) -> None:
+        """Called when a goal is completed. Checks if the milestone owning
+        this goal is now fully done, and if so completes it (which auto-
+        activates the next milestone via :meth:`complete_milestone`)."""
+        for project in self.list_projects():
+            for milestone in project.milestones:
+                if goal_id not in milestone.goal_ids:
+                    continue
+                if milestone.status != MilestoneStatus.ACTIVE:
+                    continue
+                # Check if ALL goals in this milestone are completed
+                all_done = True
+                for gid in milestone.goal_ids:
+                    try:
+                        g = self._goal_manager.get(gid) if self._goal_manager else None
+                        if g is None or g.status != GoalStatus.COMPLETED:
+                            all_done = False
+                            break
+                    except KeyError:
+                        all_done = False
+                        break
+                if all_done:
+                    self.complete_milestone(project.project_id, milestone.milestone_id)
+                return  # goal found, no need to keep searching
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -311,4 +454,6 @@ class ProjectManager:
                 target_services=list(project.target_services),
             )
             goal = self._goal_manager.create(goal_input, created_by=project.created_by)
+            # Auto-activate so agents can start working immediately
+            self._goal_manager.activate(goal.goal_id)
             milestone.goal_ids.append(goal.goal_id)

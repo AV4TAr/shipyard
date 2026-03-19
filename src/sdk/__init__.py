@@ -1,4 +1,4 @@
-"""Agent SDK / Protocol for the AI-CICD system.
+"""Agent SDK / Protocol for the Shipyard system.
 
 Defines how external AI agents connect, authenticate, pick up tasks,
 declare intents, submit work, and receive structured feedback.

@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from typing import Any
 
 from src.goals.models import AgentTask, TaskStatus
-from src.intent.schema import IntentDeclaration
 
 from .models import RouteDecision
 from .router import TaskRouter
@@ -62,16 +61,19 @@ class RoutingBridge:
         self,
         task: AgentTask,
         goal_manager: Any,
-        pipeline_orchestrator: Any,
+        pipeline_orchestrator: Any | None = None,
     ) -> RouteDecision:
-        """Route a task and, if an agent is selected, kick off the pipeline.
+        """Route a task and assign the selected agent.
+
+        Routing only *assigns* an agent to the task — it does NOT kick off
+        the pipeline.  The agent is responsible for submitting work via the
+        SDK endpoint, which triggers the pipeline.
 
         Steps:
         1. Route the task to an agent.
-        2. If an agent is selected, create an IntentDeclaration and run
-           the pipeline.
-        3. If fallback was used, note it in intent metadata.
-        4. If MANUAL or no agent found, mark task as needing human assignment.
+        2. If an agent is selected, mark the task as ASSIGNED.
+        3. If MANUAL or no agent found, leave the task PENDING for human
+           assignment.
 
         Returns:
             The routing decision.
@@ -81,35 +83,9 @@ class RoutingBridge:
         self._fire_event(decision)
 
         if decision.selected_agent_id is not None:
-            # Build an intent declaration from the task.
-            metadata: dict[str, Any] = {
-                "routed_from_task": str(task.task_id),
-                "match_score": decision.match_score,
-            }
-            if decision.fallback_used:
-                metadata["fallback_used"] = True
-                metadata["note"] = (
-                    "No specialist available; routed to generic fallback agent"
-                )
-
-            intent = IntentDeclaration(
-                agent_id=decision.selected_agent_id,
-                description=task.description,
-                rationale=f"Auto-routed from task: {task.title}",
-                target_files=list(task.target_files),
-                target_services=list(task.target_services),
-                metadata=metadata,
-            )
-
-            # Mark task as assigned.
+            # Mark task as assigned — the agent will submit work via the SDK.
             goal_manager.update_task_status(task.task_id, TaskStatus.ASSIGNED)
-
-            # Kick off the pipeline.
-            pipeline_orchestrator.run(intent, decision.selected_agent_id)
-        else:
-            # No agent selected — needs human assignment.
-            # We leave the task in PENDING status for manual handling.
-            pass
+        # else: no agent selected — stays PENDING for manual handling.
 
         return decision
 

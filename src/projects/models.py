@@ -9,7 +9,7 @@ from __future__ import annotations
 import enum
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -92,3 +92,8 @@ class Project(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     created_by: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    # Git repo fields (Phase 3: worktree code workflow)
+    repo_url: Optional[str] = None
+    repo_local_path: Optional[str] = None
+    default_branch: str = "main"

@@ -200,6 +200,16 @@ class TaskRouter:
             fallback_used=selected.agent_id == "generic",
         )
 
+    def score_task_for_agent(self, task: AgentTask, agent_id: str) -> float:
+        """Score how well a task fits a specific agent. Returns 0-1."""
+        try:
+            agent = self._registry.get(agent_id)
+        except KeyError:
+            return 0.5  # unknown agent, neutral score
+        requirements = self._analyzer.analyze(task)
+        score, _ = self._score_agent(agent, requirements)
+        return score
+
     # ------------------------------------------------------------------
     # Scoring
     # ------------------------------------------------------------------

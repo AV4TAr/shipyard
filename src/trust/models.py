@@ -56,7 +56,7 @@ class AgentProfile(BaseModel):
         New agents start with a low trust score.
         """
         if self.total_deployments == 0:
-            return 0.1  # baseline trust for brand-new agents
+            return 0.5  # baseline trust — new agents can auto-deploy low-risk work
 
         sr = self.success_rate
         rollback_rate = self.rollbacks / self.total_deployments

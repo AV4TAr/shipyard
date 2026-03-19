@@ -19,6 +19,8 @@ _CAPABILITY_KEYWORDS: dict[AgentCapability, list[str]] = {
     AgentCapability.QA: ["test", "qa", "e2e", "coverage"],
     AgentCapability.DEVOPS: ["deploy", "docker", "k8s", "infra", "ci"],
     AgentCapability.DOCUMENTATION: ["docs", "readme", "documentation"],
+    AgentCapability.ARCHITECTURE: ["architecture", "design", "module", "structure"],
+    AgentCapability.DESIGN: ["design", "layout", "wireframe", "spec"],
 }
 
 # File extension → language mapping.

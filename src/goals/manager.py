@@ -39,11 +39,13 @@ class GoalManager:
         goal_repo: GoalRepository | None = None,
         task_repo: TaskRepository | None = None,
         event_dispatcher: Any | None = None,
+        on_goal_completed: Any | None = None,
     ) -> None:
         self._decomposer = decomposer or GoalDecomposer()
         self._goal_repo = goal_repo
         self._task_repo = task_repo
         self._event_dispatcher = event_dispatcher
+        self._on_goal_completed = on_goal_completed
         # Internal dicts as fallback when no repos are provided
         self._goals: dict[uuid.UUID, Goal] = {}
         self._breakdowns: dict[uuid.UUID, TaskBreakdown] = {}
@@ -56,7 +58,8 @@ class GoalManager:
     def _save_goal(self, goal: Goal) -> None:
         if self._goal_repo:
             self._goal_repo.save(goal)
-        self._goals[goal.goal_id] = goal
+        else:
+            self._goals[goal.goal_id] = goal
 
     def _get_goal(self, goal_id: uuid.UUID) -> Goal:
         if self._goal_repo:
@@ -86,7 +89,8 @@ class GoalManager:
     def _save_task(self, task: AgentTask) -> None:
         if self._task_repo:
             self._task_repo.save(task)
-        self._tasks[task.task_id] = task
+        else:
+            self._tasks[task.task_id] = task
 
     def _get_tasks_for_goal(self, goal_id: uuid.UUID) -> list[AgentTask]:
         if self._task_repo:
@@ -158,8 +162,8 @@ class GoalManager:
                 task.status = TaskStatus.FAILED
                 self._save_task(task)
 
-        # Also update breakdown tasks in memory (for backward compat)
-        if goal_id in self._breakdowns:
+        # Also update breakdown tasks in memory (for backward compat, no-repo mode only)
+        if not self._task_repo and goal_id in self._breakdowns:
             for task in self._breakdowns[goal_id].tasks:
                 if task.status in (TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS):
                     task.status = TaskStatus.FAILED
@@ -192,7 +196,8 @@ class GoalManager:
         self._save_goal(goal)
 
         breakdown = self._decomposer.decompose(goal)
-        self._breakdowns[goal_id] = breakdown
+        if not self._task_repo:
+            self._breakdowns[goal_id] = breakdown
 
         # Index every task for fast lookup and persist
         for task in breakdown.tasks:
@@ -232,7 +237,9 @@ class GoalManager:
         task: AgentTask | None = None
         if self._task_repo:
             task = self._task_repo.get(task_id)
-        if task is None:
+            if task is None:
+                raise KeyError(f"Task {task_id} not found")
+        else:
             if task_id not in self._tasks:
                 raise KeyError(f"Task {task_id} not found")
             task = self._tasks[task_id]
@@ -273,6 +280,12 @@ class GoalManager:
                         "goal_id": str(goal_id),
                         "title": goal.title,
                     })
+                    # Notify completion callback (used by ProjectManager)
+                    if self._on_goal_completed:
+                        try:
+                            self._on_goal_completed(goal_id)
+                        except Exception:
+                            pass
             except KeyError:
                 pass
 

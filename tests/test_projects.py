@@ -528,7 +528,7 @@ class TestProjectGoalIntegration:
         goal_mgr = mgr._goal_manager
         assert goal_mgr is not None
         goal = goal_mgr.get(m.goal_ids[0])
-        assert goal.status == GoalStatus.DRAFT
+        assert goal.status == GoalStatus.ACTIVE
         assert goal.priority == GoalPriority.HIGH
         assert "Auth" in goal.title
         assert goal.created_by == "alice"

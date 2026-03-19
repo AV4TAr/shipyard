@@ -1,4 +1,4 @@
-"""LLM integration via OpenRouter for AI-CICD pipeline."""
+"""LLM integration via OpenRouter for Shipyard pipeline."""
 
 from src.llm.alignment import AlignmentResult, LLMAlignmentChecker
 from src.llm.client import LLMClient

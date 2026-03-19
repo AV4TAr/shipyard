@@ -27,15 +27,17 @@ class EventType(str, Enum):
     TASK_ROUTED = "task.routed"
     ROUTING_FALLBACK = "routing.fallback"
     ANOMALY_DETECTED = "anomaly.detected"
+    AGENT_STATUS_UPDATED = "agent.status_updated"
+    LEASE_EXPIRED = "lease.expired"
 
 
 class Event(BaseModel):
-    """An event that occurred in the AI-CICD pipeline."""
+    """An event that occurred in the Shipyard pipeline."""
 
     event_type: EventType
     timestamp: datetime
     data: dict[str, Any] = Field(default_factory=dict)
-    source: str = "ai-cicd"
+    source: str = "shipyard"
 
 
 class WebhookConfig(BaseModel):

@@ -74,6 +74,8 @@ class CLIRuntime:
         routing_bridge: RoutingBridge | None = None,
         event_dispatcher: Any | None = None,
         project_manager: ProjectManager | None = None,
+        lease_manager: Any | None = None,
+        worktree_manager: Any | None = None,
     ) -> None:
         self.goal_manager = goal_manager
         self.orchestrator = orchestrator
@@ -86,6 +88,8 @@ class CLIRuntime:
         self.routing_bridge = routing_bridge
         self.event_dispatcher = event_dispatcher
         self.project_manager = project_manager
+        self.lease_manager = lease_manager
+        self.worktree_manager = worktree_manager
 
     # ------------------------------------------------------------------
     # Factory methods
@@ -103,11 +107,11 @@ class CLIRuntime:
         When ``storage_backend="sqlite"``, data is persisted to disk via
         SQLite.  The default ``"memory"`` backend keeps everything in-memory.
 
-        The environment variable ``AI_CICD_DB_PATH`` can also be used to
+        The environment variable ``SHIPYARD_DB_PATH`` can also be used to
         enable SQLite persistence without passing arguments explicitly.
         """
         # Allow env-var to override the storage backend
-        env_db_path = os.environ.get("AI_CICD_DB_PATH")
+        env_db_path = os.environ.get("SHIPYARD_DB_PATH")
         if env_db_path:
             storage_backend = "sqlite"
             db_path = db_path or env_db_path
@@ -127,7 +131,25 @@ class CLIRuntime:
             sandbox_backend = OpenSandboxBackend()
         sandbox_manager = SandboxManager(backend=sandbox_backend)
 
-        validation_gate = ValidationGate(runners=[])
+        # Worktree manager for git-based code workflows
+        from src.worktrees.manager import WorktreeManager
+
+        worktree_manager = WorktreeManager()
+
+        # Wire all real validation runners
+        from src.validation.real_runners import (
+            RealResourceBoundsRunner,
+            RealSecurityScanRunner,
+            RealStaticAnalysisRunner,
+        )
+        from src.validation.signals import BehavioralDiffRunner
+
+        validation_gate = ValidationGate(runners=[
+            RealStaticAnalysisRunner(),
+            BehavioralDiffRunner(worktree_manager=worktree_manager),
+            RealSecurityScanRunner(),
+            RealResourceBoundsRunner(),
+        ])
         risk_scorer = RiskScorer()
         trust_tracker = TrustTracker(profile_repo=storage.agent_profiles)
         claim_manager = ClaimManager()
@@ -143,6 +165,7 @@ class CLIRuntime:
             deploy_queue=deploy_queue,
             run_repo=storage.pipeline_runs,
             event_dispatcher=event_dispatcher,
+            worktree_manager=worktree_manager,
         )
 
         decomposer: GoalDecomposer | Any = GoalDecomposer()
@@ -169,7 +192,21 @@ class CLIRuntime:
             task_router, event_dispatcher=event_dispatcher
         )
 
-        project_manager = ProjectManager(goal_manager=goal_manager)
+        project_manager = ProjectManager(
+            goal_manager=goal_manager,
+            project_repo=storage.projects,
+        )
+
+        # Auto-cascade: when a goal completes, check if its milestone is done
+        goal_manager._on_goal_completed = project_manager.on_goal_completed
+
+        # Lease manager for heartbeat-based task claims
+        from src.leases.manager import LeaseManager
+
+        lease_manager = LeaseManager(
+            goal_manager=goal_manager,
+            event_dispatcher=event_dispatcher,
+        )
 
         return cls(
             goal_manager=goal_manager,
@@ -183,6 +220,8 @@ class CLIRuntime:
             routing_bridge=routing_bridge,
             event_dispatcher=event_dispatcher,
             project_manager=project_manager,
+            lease_manager=lease_manager,
+            worktree_manager=worktree_manager,
         )
 
     @classmethod
@@ -309,16 +348,18 @@ class CLIRuntime:
         project = pm.get(uid)
         if project.status == ProjStatus.DRAFT:
             pm.plan(uid)
-            planner = ProjectPlanner()
-            milestones = planner.plan(project)
-            for ms in milestones:
-                pm.add_milestone(
-                    uid,
-                    title=ms.title,
-                    description=ms.description,
-                    order=ms.order,
-                    acceptance_criteria=ms.acceptance_criteria,
-                )
+            # Only auto-plan milestones if none were manually added
+            if not project.milestones:
+                planner = ProjectPlanner()
+                milestones = planner.plan(project)
+                for ms in milestones:
+                    pm.add_milestone(
+                        uid,
+                        title=ms.title,
+                        description=ms.description,
+                        order=ms.order,
+                        acceptance_criteria=ms.acceptance_criteria,
+                    )
         return pm.activate(uid)
 
     def cancel_project(self, project_id: str) -> Project:
@@ -357,6 +398,45 @@ class CLIRuntime:
                 pass
         return goals
 
+    def add_goal_to_project(
+        self,
+        project_id: str,
+        milestone_id: str,
+        *,
+        title: str,
+        description: str,
+        priority: str = "medium",
+        constraints: list[str] | None = None,
+        acceptance_criteria: list[str] | None = None,
+    ) -> Goal:
+        """Create a goal and link it to a project milestone."""
+        pm = self._ensure_project_manager()
+        p_uid = uuid.UUID(project_id)
+        m_uid = uuid.UUID(milestone_id)
+        project = pm.get(p_uid)
+
+        # Find the milestone
+        milestone = None
+        for ms in project.milestones:
+            if ms.milestone_id == m_uid:
+                milestone = ms
+                break
+        if milestone is None:
+            raise KeyError(f"Milestone {milestone_id} not found")
+
+        # Create the goal via GoalManager
+        goal = self.create_goal(
+            title=title,
+            description=description,
+            priority=priority,
+            constraints=constraints,
+            acceptance_criteria=acceptance_criteria,
+        )
+
+        # Link it to the milestone
+        milestone.goal_ids.append(goal.goal_id)
+        return goal
+
     # ------------------------------------------------------------------
     # Status dashboard
     # ------------------------------------------------------------------
@@ -394,21 +474,136 @@ class CLIRuntime:
     # ------------------------------------------------------------------
 
     def approve_run(self, run_id: str, comment: str | None = None) -> PipelineRun:
-        """Approve a blocked pipeline run."""
+        """Approve a blocked pipeline run.
+
+        When the run has worktree metadata (``worktree_path`` and
+        ``branch_name``), the task branch is committed and merged into
+        the project's default branch before the worktree is cleaned up.
+        """
         uid = uuid.UUID(run_id)
         run = self.orchestrator.get_run(uid)
         if run is None:
             raise KeyError(f"Pipeline run {run_id} not found")
         if run.status != PipelineStatus.BLOCKED:
-            raise ValueError(f"Run {run_id} is not pending approval (status: {run.status.value})")
+            raise ValueError(
+                f"Run {run_id} is not pending approval "
+                f"(status: {run.status.value})"
+            )
         run.mark_completed(PipelineStatus.PASSED)
         if comment:
             run.metadata["approval_comment"] = comment
+
+        # Merge worktree branch if present
+        self._merge_worktree_on_approval(run)
+
         # Record a successful deployment for the agent
         self.trust_tracker.record_outcome(
             run.agent_id, success=True, risk_score=0.5
         )
+
+        # Release lease if present
+        task_id_str = run.metadata.get("task_id")
+        if task_id_str and self.lease_manager is not None:
+            try:
+                tid = uuid.UUID(task_id_str)
+                self.lease_manager.release(tid, run.agent_id)
+            except Exception:
+                pass
+
+        # Mark the task as completed
+        if task_id_str:
+            try:
+                from src.goals.models import TaskStatus
+                self.goal_manager.update_task_status(
+                    uuid.UUID(task_id_str), TaskStatus.COMPLETED
+                )
+            except Exception:
+                pass
+
+        # Persist the updated run
+        self.orchestrator._save_run(run)
         return run
+
+    def _merge_worktree_on_approval(self, run: PipelineRun) -> None:
+        """Commit, merge, and clean up the worktree for an approved run."""
+        if self.worktree_manager is None:
+            return
+        worktree_path = run.metadata.get("worktree_path")
+        branch_name = run.metadata.get("branch_name")
+        if not (worktree_path and branch_name):
+            return
+
+        import logging
+        logger = logging.getLogger(__name__)
+
+        # Commit any uncommitted changes
+        try:
+            desc = run.metadata.get("description", "Approved change")
+            self.worktree_manager.commit(worktree_path, f"Approved: {desc}")
+        except Exception:
+            logger.debug("Commit on approval failed (may already be committed)")
+
+        # Find the project to get repo_dir
+        task_id_str = run.metadata.get("task_id")
+        project = None
+        task_obj = None
+        if task_id_str and self.project_manager:
+            try:
+                tid = uuid.UUID(task_id_str)
+                task_obj = self._find_task(tid)
+                if task_obj:
+                    project = self._find_project_for_goal(task_obj.goal_id)
+            except Exception:
+                pass
+
+        if project and task_obj:
+            # Ensure task has the branch_name for merge
+            task_obj.branch_name = branch_name
+            try:
+                repo_dir = (
+                    project.repo_local_path
+                    or str(
+                        self.worktree_manager.repos_dir
+                        / str(project.project_id)
+                    )
+                )
+                # Clean up worktree first (git requires this before merge)
+                self.worktree_manager.cleanup(worktree_path, repo_dir)
+                # Merge
+                merged = self.worktree_manager.merge(project, task_obj)
+                run.metadata["merged"] = merged
+                if merged:
+                    logger.info(
+                        "Merged branch %s for run %s",
+                        branch_name,
+                        run.run_id,
+                    )
+            except Exception:
+                logger.exception("Merge on approval failed for run %s", run.run_id)
+        else:
+            # No project context — just clean up the worktree
+            try:
+                self.worktree_manager.cleanup(worktree_path)
+            except Exception:
+                pass
+
+    def _find_task(self, task_id: uuid.UUID):
+        """Find a task by ID across all goals."""
+        for goal in self.goal_manager.list_goals():
+            for task in self.goal_manager.get_tasks(goal.goal_id):
+                if task.task_id == task_id:
+                    return task
+        return None
+
+    def _find_project_for_goal(self, goal_id: uuid.UUID):
+        """Find the project that owns a goal."""
+        if self.project_manager is None:
+            return None
+        for project in self.project_manager.list_projects():
+            for ms in project.milestones:
+                if goal_id in ms.goal_ids:
+                    return project
+        return None
 
     def reject_run(self, run_id: str, reason: str) -> PipelineRun:
         """Reject a blocked pipeline run with structured feedback."""
@@ -420,6 +615,8 @@ class CLIRuntime:
             raise ValueError(f"Run {run_id} is not pending approval (status: {run.status.value})")
         run.mark_completed(PipelineStatus.FAILED)
         run.metadata["rejection_reason"] = reason
+        # Persist the updated run
+        self.orchestrator._save_run(run)
         return run
 
     # ------------------------------------------------------------------
