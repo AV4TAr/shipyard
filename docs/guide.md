@@ -60,14 +60,19 @@ The system that matches tasks to the best available agent using weighted scoring
 ### a. Start the server
 
 ```bash
-uvicorn src.api.app:create_app --factory --host 0.0.0.0 --port 8001
+python3 -m uvicorn src.api.app:create_app --factory --host 0.0.0.0 --port 8001
 ```
 
 This starts the Shipyard API server with the Command Center web UI. If you have `OPENROUTER_API_KEY` set in your environment, LLM-powered goal decomposition is automatically enabled. If you set `SHIPYARD_DB_PATH`, data persists to SQLite; otherwise it runs in-memory.
 
+For full persistence:
+```bash
+SHIPYARD_DB_PATH=data/shipyard.db python3 -m uvicorn src.api.app:create_app --factory --host 0.0.0.0 --port 8001
+```
+
 ### b. Open the Command Center
 
-Visit [http://localhost:8001](http://localhost:8001) in your browser. The Command Center is a self-contained SPA with 7 tabs: Dashboard, Goals, Pipeline, Agents, Queue, Constraints, and Projects.
+Visit [http://localhost:8001](http://localhost:8001) in your browser. The Command Center is a self-contained SPA with 8 tabs: Dashboard, Goals, Pipeline, Agents, Queue, Constraints, Projects, and Config.
 
 ### c. Create a project
 
@@ -543,6 +548,9 @@ trust:
 | `GET` | `/api/projects/{project_id}` | Get project details |
 | `POST` | `/api/projects/{project_id}/activate` | Activate project |
 | `POST` | `/api/projects/{project_id}/cancel` | Cancel project |
+| `POST` | `/api/projects/{project_id}/pause` | Pause project |
+| `POST` | `/api/projects/{project_id}/resume` | Resume project |
+| `DELETE` | `/api/projects/{project_id}` | Delete project |
 | `GET` | `/api/projects/{project_id}/milestones` | List milestones |
 | `POST` | `/api/projects/{project_id}/milestones/{milestone_id}/complete` | Complete a milestone |
 | `GET` | `/api/projects/{project_id}/goals` | List goals in project |
@@ -566,9 +574,22 @@ trust:
 |--------|----------|-------------|
 | `POST` | `/api/agents/sdk/register` | Register agent (from agent side) |
 | `GET` | `/api/agents/sdk/tasks` | List available tasks |
-| `POST` | `/api/agents/sdk/tasks/{task_id}/claim` | Claim a task |
+| `POST` | `/api/agents/sdk/tasks/{task_id}/claim` | Claim a task (returns lease) |
 | `POST` | `/api/agents/sdk/tasks/{task_id}/submit` | Submit work (triggers pipeline) |
 | `GET` | `/api/agents/sdk/tasks/{task_id}/feedback` | Get feedback for submitted task |
+| `POST` | `/api/tasks/{task_id}/heartbeat` | Renew lease, report agent phase |
+
+**Agent Status & Leases**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/agents/status` | Get all agent statuses and phases |
+| `GET` | `/api/agents/leases` | List all active leases |
+| `GET` | `/api/agents/tasks/active` | List tasks currently being worked on |
+| `POST` | `/api/agents/{agent_id}/ban` | Ban an agent |
+| `DELETE` | `/api/agents/{agent_id}/ban` | Unban an agent |
+| `GET` | `/api/agents/banned` | List banned agents |
+| `POST` | `/api/tasks/{task_id}/revoke` | Revoke lease, reset task to PENDING |
 
 **Pipeline**
 
@@ -576,41 +597,137 @@ trust:
 |--------|----------|-------------|
 | `POST` | `/api/pipeline/{run_id}/approve` | Approve a blocked run |
 | `POST` | `/api/pipeline/{run_id}/reject` | Reject a run with feedback |
+| `GET` | `/api/pipeline/freeze` | Check pipeline freeze status |
+| `POST` | `/api/pipeline/freeze` | Freeze the pipeline (block all claims/submissions) |
+| `POST` | `/api/pipeline/unfreeze` | Unfreeze the pipeline |
+
+**Config**
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/config` | Get pipeline configuration |
+| `PUT` | `/api/config` | Update pipeline configuration |
+| `GET` | `/api/config/constraints` | Get constraints configuration |
+| `PUT` | `/api/config/constraints` | Update constraints configuration |
 
 ---
 
 ## 9. What's Real vs Simulated
 
-Shipyard is a working system, but some components are fully integrated and others use simulation layers as placeholders for production infrastructure.
+Shipyard is a working system. As of Wave 5, all 5 validation signals run real tools and the full code workflow uses git worktrees.
 
 ### Real and working today
 
+- **All 5 validation signals** -- Static analysis (ruff), security scan (bandit), resource bounds (file size checks), behavioral diff (worktree-based test diffing), intent alignment (LLM). All real, all wired in.
+- **Behavioral diffing** -- `RealBehavioralDiffRunner` runs tests on the main branch, then on the task branch, and diffs results. Detects regressions (pass to fail), fixes (fail to pass), new tests, and removed tests.
+- **Resource bounds** -- `RealResourceBoundsRunner` checks file sizes and counts against configurable limits.
+- **Git worktree code workflow** -- Tasks get isolated git worktrees. Agents write real files. Pipeline validates real code. Approved changes merge to main.
+- **Lease-based task claims** -- Agents get time-bound leases when claiming tasks. Heartbeats renew leases. Expired leases auto-reset tasks to PENDING. Background asyncio sweep loop prevents stuck tasks.
+- **Agent status tracking** -- Real-time agent phase tracking (idle, claiming, calling_llm, writing_files, running_tests, submitting, waiting). Phase badges in UI. WebSocket broadcasts.
+- **Kill switch / controls** -- Pipeline freeze (blocks all claims/submissions), project pause/resume, agent ban/unban, lease revocation. Dashboard has a FREEZE button.
+- **Config editor** -- Edit pipeline thresholds, signal weights, deploy routes, and constraints from the browser. Sliders, toggles, dropdowns.
 - **Persistent storage** -- SQLite backend with the repository pattern. Set `SHIPYARD_DB_PATH` to persist data across restarts.
 - **LLM goal decomposition** -- When `OPENROUTER_API_KEY` is set, goals are decomposed using an LLM (via OpenRouter) with a rule-based fallback.
-- **Static analysis** -- Uses `ruff` for real Python linting with JSON output and severity mapping.
-- **Security scanning** -- Uses `bandit` for real security vulnerability detection with severity mapping.
-- **Intent alignment** -- LLM-based checking that agent output matches declared intent (requires `OPENROUTER_API_KEY`).
 - **Agent routing** -- Full weighted scoring system with agent registry, task analysis, and domain-specific trust.
 - **Webhook notifications** -- Event dispatcher with webhook and Slack channels, HMAC signing, 15 event types.
 - **Trust scoring** -- Computed from deployment history, domain-specific, updates automatically.
-- **Command Center** -- Fully functional web UI with 7 views, WebSocket support, dark theme.
+- **Command Center** -- Fully functional web UI with 8 views, WebSocket support, dark theme.
 - **CLI** -- Full command set for goals, projects, agents, pipeline, queue management.
-- **Agent SDK** -- Complete protocol for agents to register, claim, submit, and receive feedback.
+- **Agent SDK** -- Complete protocol with auto-heartbeat, workspace file ops, phase tracking, and cancel signal.
 
 ### Simulated / placeholder
 
 - **Sandbox execution** -- By default, sandbox runs are simulated (always pass). To enable real sandboxed execution, set `OPENSANDBOX_SERVER_URL` to point to an OpenSandbox server.
-- **Behavioral diffing** -- Not yet implemented. The signal always passes. This is the hardest component to build (needs traffic replay infrastructure).
-- **Resource bounds checking** -- Returns simulated results. Would need runtime metrics from the sandbox.
 - **Post-deploy monitoring** -- Anomaly detection logic exists but is not connected to real metrics sources.
 
 ### What this means in practice
 
-You can use Shipyard today for the full goal-to-task-to-agent-to-pipeline flow. Static analysis and security scanning are real checks that will catch actual issues. Trust scoring, routing, and notifications all work. The main gap is that the sandbox does not actually execute code in an isolated environment unless you configure OpenSandbox, and behavioral diffing is not yet functional. In practice, this means the pipeline validates structure and security but does not verify runtime behavior.
+You can use Shipyard today for the full goal-to-task-to-agent-to-pipeline flow with real code. Agents write files in isolated git worktrees, the pipeline runs ruff, bandit, pytest, and LLM intent checks on real code, and approved changes merge to main. Leases prevent stuck tasks. The kill switch gives you instant control when needed. The main remaining gap is that the sandbox does not execute in a fully isolated container unless you configure OpenSandbox, and post-deploy monitoring is not connected to real metrics.
 
 ---
 
-## 10. Architecture Overview
+## 10. Config Editor
+
+The Config tab in the Command Center lets you edit pipeline configuration from the browser without touching YAML files.
+
+### What you can edit
+
+- **Risk thresholds** -- Sliders to adjust the score boundaries for low/medium/high/critical risk levels
+- **Signal weights** -- Adjust how much each validation signal (static analysis, security scan, behavioral diff, intent alignment, resource bounds) influences the overall score
+- **Deploy route settings** -- Configure which routes are enabled and their parameters
+- **Constraints** -- Add, edit, or remove architectural constraints with severity levels
+
+### API endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/config` | Get current pipeline configuration |
+| `PUT` | `/api/config` | Update pipeline configuration |
+| `GET` | `/api/config/constraints` | Get constraints configuration |
+| `PUT` | `/api/config/constraints` | Update constraints configuration |
+
+---
+
+## 11. Kill Switch and Controls
+
+Shipyard provides emergency controls for when you need to stop the system quickly.
+
+### Pipeline freeze
+
+Freezing the pipeline blocks all new task claims and work submissions system-wide. Agents already working receive a `cancel: true` signal on their next heartbeat.
+
+**Command Center:** Click the FREEZE button on the Dashboard tab.
+
+**API:**
+```bash
+# Check freeze status
+curl http://localhost:8001/api/pipeline/freeze
+
+# Freeze
+curl -X POST http://localhost:8001/api/pipeline/freeze
+
+# Unfreeze
+curl -X POST http://localhost:8001/api/pipeline/unfreeze
+```
+
+### Project pause/resume
+
+Pause a specific project without affecting others.
+
+```bash
+# Pause
+curl -X POST http://localhost:8001/api/projects/<project_id>/pause
+
+# Resume
+curl -X POST http://localhost:8001/api/projects/<project_id>/resume
+```
+
+### Agent ban/unban
+
+Ban a misbehaving agent. Banned agents cannot claim tasks or submit work. Active leases are revoked.
+
+```bash
+# Ban
+curl -X POST http://localhost:8001/api/agents/<agent_id>/ban
+
+# Unban
+curl -X DELETE http://localhost:8001/api/agents/<agent_id>/ban
+
+# List banned agents
+curl http://localhost:8001/api/agents/banned
+```
+
+### Lease revocation
+
+Revoke an agent's lease on a specific task, resetting it to PENDING so another agent can pick it up.
+
+```bash
+curl -X POST http://localhost:8001/api/tasks/<task_id>/revoke
+```
+
+---
+
+## 12. Architecture Overview
 
 ```mermaid
 graph TD
@@ -631,6 +748,8 @@ graph TD
         SDK["Agent SDK<br/>src/sdk/"]
         Intent["Intent<br/>src/intent/"]
         Coordination["Coordination<br/>src/coordination/"]
+        Leases["Leases<br/>src/leases/"]
+        Worktrees["Worktrees<br/>src/worktrees/"]
     end
 
     subgraph Quality["QUALITY LAYER"]
@@ -726,4 +845,4 @@ sequenceDiagram
 - **Check agent health**: `python -m src agents`
 - **Architecture details**: See `docs/architecture.md`
 - **What is left to build**: See `docs/todo.md`
-- **Source code**: All 16 modules live under `src/` with one test file per module in `tests/`
+- **Source code**: All 18 modules live under `src/` with one test file per module in `tests/`

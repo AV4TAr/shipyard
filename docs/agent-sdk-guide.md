@@ -7,10 +7,10 @@ How to build AI agents that work with Shipyard's pipeline.
 Agents are external processes that connect to Shipyard via HTTP. The lifecycle is:
 
 ```
-Register → Discover tasks → Claim → Do work → Submit → Get feedback → Repeat
+Register → Discover tasks → Claim (get lease) → Heartbeat → Do work in worktree → Submit → Get feedback → Repeat
 ```
 
-Shipyard handles validation, trust scoring, and deployment routing. Your agent just needs to do the work and submit it.
+Shipyard handles validation, trust scoring, and deployment routing. Your agent just needs to do the work and submit it. The SDK provides auto-heartbeat, workspace file operations, and phase tracking out of the box.
 
 ## Base URL
 
@@ -82,19 +82,86 @@ Response:
 
 ### 3. Claim a Task
 
-Lock a task so no other agent picks it up. Changes task status to `ASSIGNED`.
+Lock a task so no other agent picks it up. Changes task status to `ASSIGNED` and returns a time-bound lease.
 
 ```
 POST /api/agents/sdk/tasks/{task_id}/claim
 ```
 
-Returns the full `TaskAssignment` with constraints and acceptance criteria.
+Response includes lease information:
+```json
+{
+  "task_id": "930fb3eb-...",
+  "title": "Implement: Build shareable todo list app",
+  "description": "...",
+  "constraints": [],
+  "acceptance_criteria": [],
+  "target_files": [],
+  "estimated_risk": "low",
+  "lease_id": "a1b2c3d4-...",
+  "lease_expires_at": "2026-03-19T12:30:00Z",
+  "workspace_path": "/path/to/worktree"
+}
+```
 
-### 4. Do the Work
+The lease expires if the agent does not heartbeat. Expired leases reset the task to PENDING so another agent can claim it.
 
-This is your agent's job. Read the task description, write code, run tests — whatever the task requires. Shipyard doesn't care how you do it, only what you submit.
+### 4. Heartbeat
 
-### 5. Submit Work
+While working, send periodic heartbeats to renew your lease and report your current phase.
+
+```
+POST /api/tasks/{task_id}/heartbeat
+```
+
+```json
+{
+  "agent_id": "my-python-agent",
+  "phase": "writing_files"
+}
+```
+
+**Agent phases:** `idle`, `claiming`, `calling_llm`, `writing_files`, `running_tests`, `submitting`, `waiting`
+
+Response:
+```json
+{
+  "lease_renewed": true,
+  "expires_at": "2026-03-19T12:35:00Z",
+  "cancel": false
+}
+```
+
+If `cancel` is `true`, the agent should stop work immediately. This happens when:
+- The pipeline is frozen (system-wide kill switch)
+- The agent has been banned
+- The project has been paused
+- The lease has been revoked
+
+**Auto-heartbeat:** The Python SDK client starts a background daemon thread that sends heartbeats automatically. You do not need to manage this manually.
+
+### 5. Do the Work (Workspace)
+
+Agents work in an isolated git worktree. The SDK provides a `Workspace` class for file operations:
+
+```python
+# Read existing files for context
+existing_code = client.workspace.read_file("src/models.py")
+
+# Write new/modified files
+client.workspace.write_file("src/api/middleware.py", middleware_code)
+client.workspace.write_file("tests/test_middleware.py", test_code)
+
+# List files
+files = client.workspace.list_files("src/")
+
+# Set your phase so the dashboard shows what you're doing
+client.set_phase("writing_files")
+```
+
+The workspace is backed by a git worktree on the server. Each task gets its own branch. When the pipeline approves the work, the branch merges to main.
+
+### 6. Submit Work
 
 Send your completed work through the pipeline for validation.
 
@@ -127,7 +194,7 @@ POST /api/agents/sdk/tasks/{task_id}/submit
 
 **Important:** You can only have one active submission per task. If a previous submission is blocked (waiting for human approval), you'll get a `409 Conflict`. Wait for it to be approved or rejected before resubmitting.
 
-### 6. Handle Feedback
+### 7. Handle Feedback
 
 The submit endpoint returns structured feedback immediately:
 
@@ -152,7 +219,7 @@ The submit endpoint returns structured feedback immediately:
 | `needs_revision` | Blocked for human approval. | Wait. Poll feedback endpoint. |
 | `rejected` | Pipeline failed. | Read suggestions, fix issues, resubmit. |
 
-### 7. Poll for Updates
+### 8. Poll for Updates
 
 If your submission is blocked (`needs_revision`), poll for updated feedback after the human acts:
 
@@ -554,9 +621,13 @@ Then go to the Command Center Pipeline tab to review and approve.
 |--------|----------|-------------|
 | `POST` | `/api/agents/sdk/register` | Register agent |
 | `GET` | `/api/agents/sdk/tasks` | List available tasks |
-| `POST` | `/api/agents/sdk/tasks/{id}/claim` | Claim a task |
+| `POST` | `/api/agents/sdk/tasks/{id}/claim` | Claim a task (returns lease) |
+| `POST` | `/api/tasks/{id}/heartbeat` | Renew lease, report phase |
 | `POST` | `/api/agents/sdk/tasks/{id}/submit` | Submit work |
 | `GET` | `/api/agents/sdk/tasks/{id}/feedback` | Get feedback |
+| `GET` | `/api/agents/status` | Get all agent statuses |
+| `GET` | `/api/agents/leases` | List active leases |
+| `GET` | `/api/agents/tasks/active` | List tasks in progress |
 
 ## Non-SDK Endpoints (for context)
 

@@ -43,6 +43,11 @@ graph TD
         Intent --> Sandbox --> Validation --> Trust --> Deploy
     end
 
+    subgraph LeaseWorktree["LEASE & WORKTREE LAYER"]
+        Leases["Leases<br/>time-bound task claims<br/>heartbeat renewal"]
+        Worktrees["Git Worktrees<br/>isolated branch per task<br/>merge on approval"]
+    end
+
     subgraph Coordination["COORDINATION LAYER"]
         Claims["Claims<br/>agents lock code areas"]
         Merge["Semantic Merge<br/>compatibility checking"]
@@ -50,7 +55,7 @@ graph TD
         Feedback["Feedback<br/>machine-readable for agents"]
     end
 
-    Human --> Decomposition --> Routing --> Pipeline --> Coordination
+    Human --> Decomposition --> Routing --> LeaseWorktree --> Pipeline --> Coordination
     Deploy -->|"anomaly"| Feedback
     Feedback -->|"structured feedback"| Sandbox
 ```
@@ -136,6 +141,13 @@ graph TD
     style HumanApproval fill:#ef5350
     style Canary fill:#b71c1c,color:#fff
 ```
+
+### Lease & Worktree Layer
+
+| Component | Module | Purpose |
+|---|---|---|
+| Leases | `src/leases/manager.py` | Time-bound task claims with heartbeat renewal. Expired leases auto-reset tasks to PENDING. Background asyncio sweep loop. |
+| Worktrees | `src/worktrees/manager.py` | Git worktree isolation per task. Projects link to repos via `repo_url`. Agents write real files. Approved changes merge to main. |
 
 ### Coordination Layer
 
@@ -236,14 +248,19 @@ graph LR
     cli --> coordination
     cli --> constraints
     cli --> sandbox
+    cli --> leases
+    cli --> worktrees
 
     goals --> intent
     routing --> pipeline
     routing --> trust
+    leases --> goals
+    worktrees --> pipeline
     pipeline --> validation
     pipeline --> sandbox
     pipeline --> trust
     validation --> constraints
+    validation --> worktrees
 ```
 
 ## Current Status
@@ -252,7 +269,7 @@ graph LR
 |---|---|---|
 | Intent | Built | 21 |
 | Sandbox | Built (simulated + OpenSandbox backend) | 46 |
-| Validation | Built (real + simulated runners) | 51 |
+| Validation | Built (all 5 signals real) | 51 |
 | Trust/Risk | Built | 27 |
 | Coordination | Built | 24 |
 | Pipeline | Built | 17 |
@@ -263,15 +280,18 @@ graph LR
 | API (Command Center) | Built | 15 |
 | Storage | Built (memory + SQLite) | 63 |
 | LLM | Built (OpenRouter) | 22 |
-| SDK | Built | 25 |
+| SDK | Built (auto-heartbeat, workspace, phases) | 25 |
 | Notifications | Built | 45 |
 | Projects | Built | 52 |
-| **Total** | | **558** |
+| Leases | Built (heartbeat renewal, auto-expiry) | ~87 |
+| Worktrees | Built (git worktree isolation per task) | ~87 |
+| **Total** | | **806** |
 
 ## What's Not Built Yet
 
 See [todo.md](./todo.md) for the full list. Key remaining gaps:
 
-- **Integration wiring** — storage, LLM decomposer, and notifications need to be wired into existing managers
-- **Behavioral diffing** — traffic replay for semantic change detection
-- **UI polish** — structured feedback viewer, config editor, project views in frontend
+- **Agent SDK rewrite** — dedicated pip-installable package with async support
+- **Traffic replay behavioral diff** — record/replay HTTP traffic for deeper semantic regression detection
+- **Multi-language linters** — extend static analysis beyond Python (ESLint, golangci-lint, etc.)
+- **Multi-repo support** — orchestrate across multiple git repositories

@@ -53,14 +53,25 @@ The primary interface between the human operator (air traffic controller) and th
 
 ## Medium Priority
 
-- [ ] OpenSandbox production hardening — resource usage metrics, JSON report parsing via `sandbox.files.read_file()`, timeout enforcement
-- [ ] Behavioral diffing with traffic replay
-- [ ] Command Center config editor — in-browser editing of pipeline thresholds/weights
+- [x] OpenSandbox production hardening — resource usage metrics, JSON report parsing via `sandbox.files.read_file()`, timeout enforcement
+- [x] Behavioral diffing — `RealBehavioralDiffRunner` runs tests before (main) and after (task branch), diffs results, detects regressions/fixes/new/removed tests
+- [x] Command Center config editor — in-browser editing of pipeline thresholds, signal weights, deploy routes, constraints. Sliders, toggles, dropdowns.
 - [x] Command Center UI polish — structured feedback viewer with collapsible stages, loading spinners, tab animations, toast notifications, enhanced agents tab with capability badges
 - [x] Project Layer API routes + frontend views — 8 API endpoints, CLI `project` subcommand, Projects tab in Command Center (7th tab)
+- [x] Lease-based task claims — `src/leases/manager.py`. Agents get leases on claim, heartbeat to renew, expired leases auto-reset tasks to PENDING. Background asyncio sweep loop.
+- [x] Agent status tracking — AgentPhase enum (idle, claiming, calling_llm, writing_files, running_tests, submitting, waiting). Heartbeats carry phase. `GET /api/agents/status` endpoint. WebSocket broadcasts. Phase badges in UI.
+- [x] Git worktree code workflow — `src/worktrees/manager.py`. Projects link to git repos. Tasks get isolated worktrees. Agents write real files. Pipeline validates real code (pytest, ruff, bandit). Approved changes merge to main.
+- [x] All 5 validation signals real — RealStaticAnalysisRunner (ruff), RealSecurityScanRunner (bandit), RealResourceBoundsRunner (file sizes), RealBehavioralDiffRunner (worktree test diff), IntentAlignmentRunner (LLM).
+- [x] Kill switch / controls — Pipeline freeze (blocks all claims/submissions), project pause/resume, agent ban/unban, lease revocation. Heartbeat returns `cancel: true` when frozen/banned/paused. Dashboard FREEZE button.
+- [x] SDK enhancements — Auto-heartbeat (Python daemon thread, TS setInterval). `Workspace` class for file ops in worktrees. `client.workspace` property. `client.set_phase()`. HeartbeatRequest/Response with cancel signal.
+- [x] Agent v4 — `agents/claude_agent.py`. Uses SDK client, worktrees, auto-heartbeat, phase tracking. Reads existing code from workspace for context. Writes files to worktree. Server generates diff.
+- [x] Branding — AI-CICD → Shipyard throughout. `SHIPYARD_DB_PATH` env var.
 
 ## Low Priority
 
+- [ ] Agent SDK rewrite — dedicated pip-installable package with async support
+- [ ] Traffic replay behavioral diff — record/replay HTTP traffic for semantic regression detection
+- [ ] Multi-language linters — extend static analysis beyond Python (ESLint, golangci-lint, etc.)
 - [ ] Multi-repo support
 - [ ] Cost tracking per agent / per deploy
 - [ ] Audit log export
