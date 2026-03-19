@@ -28,6 +28,7 @@ class IntentRegistry:
         intent_repo: IntentRepository | None = None,
     ) -> None:
         self._active: dict[uuid.UUID, IntentDeclaration] = {}
+        self._released: set[uuid.UUID] = set()  # IDs released but not deletable from repo
         self._constraints = list(constraints or [])
         self._validator = validator or IntentValidator()
         self._intent_repo = intent_repo
@@ -66,11 +67,13 @@ class IntentRegistry:
         otherwise.
         """
         removed = self._active.pop(intent_id, None) is not None
-        # Also remove from repo if available
+        # Also check repo for existence
         if self._intent_repo:
             existing = self._intent_repo.get(intent_id)
             if existing is not None:
-                # Repo doesn't have delete, so we only track in memory
+                # Repo doesn't have delete, so track released IDs to filter
+                # them out in get_active()
+                self._released.add(intent_id)
                 removed = True
         return removed
 
@@ -78,7 +81,10 @@ class IntentRegistry:
         """Return a list of all currently active intents."""
         if self._intent_repo:
             intents = self._intent_repo.list_all()
+            # Filter out released intents (repo has no delete)
+            intents = [i for i in intents if i.intent_id not in self._released]
             # Update cache
+            self._active.clear()
             for i in intents:
                 self._active[i.intent_id] = i
             return intents

@@ -136,5 +136,9 @@ class TrustTracker:
     def profiles(self) -> dict[str, AgentProfile]:
         """Read-only access to all stored profiles."""
         if self._profile_repo:
-            return {p.agent_id: p for p in self._profile_repo.list_all()}
+            result = {}
+            for p in self._profile_repo.list_all():
+                self._profiles[p.agent_id] = p  # refresh cache
+                result[p.agent_id] = p
+            return result
         return dict(self._profiles)
