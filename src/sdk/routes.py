@@ -484,11 +484,7 @@ def submit_work(task_id: uuid.UUID, submission: WorkSubmission) -> FeedbackMessa
                             / str(project.project_id)
                         )
                     )
-                    # Clean up worktree before merge (git requires this)
-                    rt.worktree_manager.cleanup(
-                        task_obj_merge.worktree_path, repo_dir
-                    )
-                    # Merge the branch into main
+                    # Merge FIRST (while worktree still exists)
                     merged = rt.worktree_manager.merge(project, task_obj_merge)
                     pipeline_run.metadata["merged"] = merged
                     if merged:
@@ -498,6 +494,10 @@ def submit_work(task_id: uuid.UUID, submission: WorkSubmission) -> FeedbackMessa
                             task_id,
                         )
                     rt.orchestrator._save_run(pipeline_run)
+                    # Clean up worktree AFTER merge
+                    rt.worktree_manager.cleanup(
+                        task_obj_merge.worktree_path, repo_dir
+                    )
             except Exception:
                 _merge_logger.exception(
                     "Auto-merge failed for task %s", task_id

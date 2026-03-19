@@ -31,8 +31,13 @@ class TrustTracker:
         self._profiles[profile.agent_id] = profile
 
     def _get_profile(self, agent_id: str) -> AgentProfile | None:
+        # Repo is source of truth when available
         if self._profile_repo:
-            return self._profile_repo.get(agent_id)
+            profile = self._profile_repo.get(agent_id)
+            if profile is not None:
+                self._profiles[agent_id] = profile  # update cache
+                return profile
+        # Fall back to memory
         return self._profiles.get(agent_id)
 
     # ------------------------------------------------------------------

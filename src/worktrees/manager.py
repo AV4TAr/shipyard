@@ -89,6 +89,17 @@ class WorktreeManager:
                     f"git clone failed: {result.stderr}"
                 )
 
+        # Configure the original repo to accept pushes to checked-out branches.
+        # This is safe — it tells git to update the working tree on push.
+        repo_url = project.repo_url
+        if repo_url and not repo_url.startswith(("http://", "https://", "git://")):
+            origin_path = Path(repo_url).resolve()
+            if origin_path.exists():
+                _run_git(
+                    "config", "receive.denyCurrentBranch", "updateInstead",
+                    cwd=origin_path,
+                )
+
         # Update project's local path
         project.repo_local_path = str(repo_dir)
         return repo_dir
@@ -229,6 +240,16 @@ class WorktreeManager:
             return False
 
         logger.info("Merged %s into %s", branch_name, default_branch)
+
+        # Push merged changes back to origin (best-effort)
+        push_result = _run_git("push", "origin", default_branch, cwd=repo_dir)
+        if push_result.returncode != 0:
+            logger.warning(
+                "git push to origin failed (non-fatal): %s", push_result.stderr
+            )
+        else:
+            logger.info("Pushed %s to origin", default_branch)
+
         return True
 
     def cleanup(self, worktree_path: str, repo_dir: str | None = None) -> None:

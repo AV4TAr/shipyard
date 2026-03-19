@@ -567,9 +567,7 @@ class CLIRuntime:
                         / str(project.project_id)
                     )
                 )
-                # Clean up worktree first (git requires this before merge)
-                self.worktree_manager.cleanup(worktree_path, repo_dir)
-                # Merge
+                # Merge FIRST (while worktree still exists)
                 merged = self.worktree_manager.merge(project, task_obj)
                 run.metadata["merged"] = merged
                 if merged:
@@ -578,6 +576,8 @@ class CLIRuntime:
                         branch_name,
                         run.run_id,
                     )
+                # Clean up worktree AFTER merge
+                self.worktree_manager.cleanup(worktree_path, repo_dir)
             except Exception:
                 logger.exception("Merge on approval failed for run %s", run.run_id)
         else:

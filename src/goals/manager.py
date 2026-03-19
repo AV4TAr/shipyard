@@ -56,21 +56,22 @@ class GoalManager:
     # ------------------------------------------------------------------
 
     def _save_goal(self, goal: Goal) -> None:
+        # Write to repo first (source of truth), then update cache
         if self._goal_repo:
             self._goal_repo.save(goal)
-        else:
-            self._goals[goal.goal_id] = goal
+        self._goals[goal.goal_id] = goal
 
     def _get_goal(self, goal_id: uuid.UUID) -> Goal:
+        # Repo is source of truth when available
         if self._goal_repo:
             goal = self._goal_repo.get(goal_id)
-            if goal is None:
-                raise KeyError(f"Goal {goal_id} not found")
-            return goal
-        try:
+            if goal is not None:
+                self._goals[goal_id] = goal  # update cache
+                return goal
+        # Fall back to memory
+        if goal_id in self._goals:
             return self._goals[goal_id]
-        except KeyError:
-            raise KeyError(f"Goal {goal_id} not found") from None
+        raise KeyError(f"Goal {goal_id} not found")
 
     def _list_goals(
         self,
@@ -78,7 +79,11 @@ class GoalManager:
         priority: GoalPriority | None = None,
     ) -> list[Goal]:
         if self._goal_repo:
-            return self._goal_repo.list_all(status=status, priority=priority)
+            goals = self._goal_repo.list_all(status=status, priority=priority)
+            # Update cache
+            for g in goals:
+                self._goals[g.goal_id] = g
+            return goals
         results = list(self._goals.values())
         if status is not None:
             results = [g for g in results if g.status == status]
@@ -87,14 +92,18 @@ class GoalManager:
         return results
 
     def _save_task(self, task: AgentTask) -> None:
+        # Write to repo first (source of truth), then update cache
         if self._task_repo:
             self._task_repo.save(task)
-        else:
-            self._tasks[task.task_id] = task
+        self._tasks[task.task_id] = task
 
     def _get_tasks_for_goal(self, goal_id: uuid.UUID) -> list[AgentTask]:
         if self._task_repo:
-            return self._task_repo.list_by_goal(goal_id)
+            tasks = self._task_repo.list_by_goal(goal_id)
+            # Update cache
+            for t in tasks:
+                self._tasks[t.task_id] = t
+            return tasks
         breakdown = self._breakdowns.get(goal_id)
         if breakdown is None:
             return []
@@ -233,16 +242,16 @@ class GoalManager:
         Raises:
             KeyError: If the task does not exist.
         """
-        # Try repo first, then internal dict
+        # Repo is source of truth when available, then fall back to cache
         task: AgentTask | None = None
         if self._task_repo:
             task = self._task_repo.get(task_id)
-            if task is None:
-                raise KeyError(f"Task {task_id} not found")
-        else:
-            if task_id not in self._tasks:
-                raise KeyError(f"Task {task_id} not found")
-            task = self._tasks[task_id]
+            if task is not None:
+                self._tasks[task_id] = task  # update cache
+        if task is None:
+            task = self._tasks.get(task_id)
+        if task is None:
+            raise KeyError(f"Task {task_id} not found")
 
         task.status = status
         self._save_task(task)

@@ -45,11 +45,10 @@ class ProjectManager:
         self._project_repo = project_repo
 
     def _save_project(self, project: Project) -> None:
-        """Persist project to repo or in-memory dict."""
+        """Persist project to repo first (source of truth), then update cache."""
         if self._project_repo is not None:
             self._project_repo.save(project)
-        else:
-            self._projects[project.project_id] = project
+        self._projects[project.project_id] = project
 
     # ------------------------------------------------------------------
     # Project CRUD
@@ -75,22 +74,27 @@ class ProjectManager:
         Raises:
             KeyError: If the project does not exist.
         """
+        # Repo is source of truth when available
         if self._project_repo is not None:
             project = self._project_repo.get(project_id)
-            if project is None:
-                raise KeyError(f"Project {project_id} not found")
-            return project
-        try:
+            if project is not None:
+                self._projects[project_id] = project  # update cache
+                return project
+        # Fall back to memory
+        if project_id in self._projects:
             return self._projects[project_id]
-        except KeyError:
-            raise KeyError(f"Project {project_id} not found")
+        raise KeyError(f"Project {project_id} not found")
 
     def list_projects(self, status: ProjectStatus | None = None) -> list[Project]:
         """List all projects, optionally filtered by status."""
         if self._project_repo is not None:
-            return self._project_repo.list_all(
+            projects = self._project_repo.list_all(
                 status=status.value if status is not None else None
             )
+            # Update cache
+            for p in projects:
+                self._projects[p.project_id] = p
+            return projects
         results = list(self._projects.values())
         if status is not None:
             results = [p for p in results if p.status == status]
