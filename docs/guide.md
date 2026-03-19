@@ -725,9 +725,49 @@ Revoke an agent's lease on a specific task, resetting it to PENDING so another a
 curl -X POST http://localhost:8001/api/tasks/<task_id>/revoke
 ```
 
+### Task reset
+
+Reset a failed task back to PENDING so agents can retry.
+
+```bash
+curl -X POST http://localhost:8001/api/tasks/<task_id>/reset
+```
+
 ---
 
-## 12. Architecture Overview
+## 12. Retry & Recovery
+
+When an agent's code is rejected by the pipeline, a three-level retry system handles recovery automatically.
+
+### Level 1: Local fix (same agent, same claim)
+Before submitting to the pipeline, the agent runs tests locally. If they fail, it sends the test output back to Claude and asks for a fix. Up to **2 local fix attempts** before submitting.
+
+### Level 2: Pipeline retry (same agent, same claim)
+If the pipeline rejects the submission (ruff errors, test failures, security issues), the agent receives structured feedback with the exact errors, line numbers, and suggestions. It sends this to Claude and regenerates. Up to **3 pipeline submissions** per claim.
+
+### Level 3: Task re-claim (any agent, new claim)
+When the pipeline rejects a submission, the task resets to **PENDING** (not FAILED). Any agent — including the same one — can claim it again for a fresh attempt. Each claim increments `retry_count` on the task. After **5 total claims** with no success, the task is permanently **FAILED** and requires human intervention.
+
+### What the agent sees on retry
+
+The retry prompt includes:
+- The pipeline's rejection message
+- Per-signal validation results (ruff findings, test failures, security issues)
+- Actionable suggestions from the pipeline
+- The local test output (stdout + stderr)
+- The current workspace files (from the previous attempt)
+
+### What happens when all retries are exhausted
+
+The task is marked FAILED and visible in the dashboard. The human operator can:
+- **Reset the task** — clears retry count, agents try again
+- **Adjust constraints** — relax rules that are too strict
+- **Edit the project description** — clarify what's needed
+- **Implement manually** — push code directly to the repo
+
+---
+
+## 13. Architecture Overview
 
 ```mermaid
 graph TD

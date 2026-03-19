@@ -206,23 +206,74 @@ sequenceDiagram
     end
 ```
 
-### Escalation Path
+### Retry & Recovery Flow
+
+When an agent's work is rejected by the pipeline, a multi-level retry system kicks in:
 
 ```mermaid
 graph TD
-    Fail["Agent work fails validation"] --> Feedback["Structured feedback to agent"]
-    Feedback --> Retry["Agent retries in sandbox"]
-    Retry -->|"passes"| Continue["Continue pipeline"]
-    Retry -->|"max iterations"| TaskFail["Task marked FAILED"]
-    TaskFail --> Notify["Human notified"]
-    Notify --> Reassign["Reassign to different agent"]
-    Notify --> Adjust["Adjust constraints"]
-    Notify --> Manual["Intervene manually"]
+    Generate["Agent generates code"] --> Write["Write files to worktree"]
+    Write --> Ruff["Run ruff --fix (auto-format)"]
+    Ruff --> LocalTest["Run pytest locally"]
+    LocalTest -->|"pass"| Submit["Submit to pipeline"]
+    LocalTest -->|"fail"| LocalFix{"Local fix attempts < 2?"}
+    LocalFix -->|"yes"| AskFix["Send test output to Claude → fix"] --> Write
+    LocalFix -->|"no"| Submit
+    Submit --> Pipeline["Pipeline: real tests + ruff + bandit + behavioral diff"]
+    Pipeline -->|"accepted"| Merge["Merge branch to main ✓"]
+    Pipeline -->|"rejected"| RetryCheck{"Pipeline attempts < 3?"}
+    RetryCheck -->|"yes"| FeedbackLoop["Extract feedback → retry from Generate"]
+    FeedbackLoop --> Generate
+    RetryCheck -->|"no"| ResetCheck{"Total claims < 5?"}
+    ResetCheck -->|"yes"| Reset["Task → PENDING (another agent can try)"]
+    ResetCheck -->|"no"| Dead["Task → FAILED (human intervention needed)"]
 
-    style Fail fill:#ef5350,color:#fff
-    style Continue fill:#66bb6a
-    style Notify fill:#42a5f5
+    style Merge fill:#66bb6a,color:#fff
+    style Dead fill:#ef5350,color:#fff
+    style Reset fill:#42a5f5,color:#fff
 ```
+
+**Three levels of retry:**
+
+| Level | Scope | Max attempts | What happens |
+|-------|-------|-------------|--------------|
+| **Local fix** | Same agent, same claim | 2 | Claude sees test output, fixes code, re-runs tests locally |
+| **Pipeline retry** | Same agent, same claim | 3 | Claude sees pipeline feedback (ruff, bandit, test failures), regenerates and re-submits |
+| **Task re-claim** | Any agent, new claim | 5 total | Task resets to PENDING on rejection. Another agent (or the same one) claims it fresh |
+
+After 5 total claims with no success, the task is permanently FAILED and requires human intervention (reassign, adjust constraints, or implement manually).
+
+**Key fields on AgentTask:**
+- `retry_count: int` — incremented each time the task is claimed (across all agents)
+- `max_retries: int = 5` — configurable cap
+
+### Escalation Path
+
+When all retries are exhausted:
+
+```mermaid
+graph TD
+    TaskFail["Task FAILED (5 attempts)"] --> Notify["Human notified via dashboard"]
+    Notify --> Reassign["Reset retry count → agents try again"]
+    Notify --> Adjust["Adjust constraints or project description"]
+    Notify --> Manual["Implement manually, push to repo"]
+
+    style TaskFail fill:#ef5350,color:#fff
+    style Notify fill:#42a5f5,color:#fff
+```
+
+### Kill Switch & Controls
+
+The human operator has multiple levels of control:
+
+| Control | Effect | Reversible |
+|---------|--------|------------|
+| **Freeze pipeline** | Blocks ALL claims and submissions globally | Yes (unfreeze) |
+| **Pause project** | Hides project's tasks from agents, heartbeat sends cancel | Yes (resume) |
+| **Cancel project** | Revokes all leases, stops all work | No |
+| **Ban agent** | Agent can't claim any tasks, heartbeat sends cancel | Yes (unban) |
+| **Revoke lease** | Force-expire a specific lease, task → PENDING | Yes |
+| **Reset task** | Reset a failed task to PENDING for retry | Yes |
 
 ## Key Design Decisions
 
