@@ -213,8 +213,70 @@ def scan_workspace(workspace):
     return "The repository is empty (no source files yet)."
 
 
-def ask_claude(llm_client, model, agent_name, task, system_prompt, workspace):
-    """Ask Claude to generate code for a task."""
+def format_feedback_for_retry(feedback_data, local_test_output=None):
+    """Format pipeline feedback and local test output into a retry prompt addition.
+
+    Args:
+        feedback_data: The FeedbackMessage dict from the pipeline.
+        local_test_output: Optional string of local test stderr/stdout.
+
+    Returns:
+        A string to append to the Claude prompt for retry attempts.
+    """
+    parts = ["PREVIOUS ATTEMPT FAILED. Here is the error output:"]
+
+    # Pipeline feedback
+    if feedback_data:
+        if isinstance(feedback_data, dict):
+            msg = feedback_data.get("message", "")
+            if msg:
+                parts.append(f"\nPipeline result: {msg}")
+
+            suggestions = feedback_data.get("suggestions", [])
+            if suggestions:
+                parts.append("\nPipeline suggestions:")
+                for s in suggestions:
+                    parts.append(f"  - {s}")
+
+            validation = feedback_data.get("validation_results", {})
+            if validation:
+                # Extract signal results for actionable feedback
+                signals = validation.get("signal_results", {})
+                if signals:
+                    parts.append("\nValidation signal results:")
+                    for signal_name, signal_data in signals.items():
+                        passed = signal_data.get("passed", "unknown")
+                        detail = signal_data.get("detail", "")
+                        parts.append(f"  {signal_name}: {'PASS' if passed else 'FAIL'}")
+                        if detail:
+                            parts.append(f"    {detail}")
+
+                next_actions = validation.get("next_actions", [])
+                if next_actions:
+                    parts.append("\nRecommended actions:")
+                    for action in next_actions:
+                        parts.append(f"  - {action}")
+
+    # Local test output
+    if local_test_output:
+        parts.append(f"\nLocal test output:\n{local_test_output[-2000:]}")
+
+    parts.append(
+        "\nFix the issues above and regenerate the files. "
+        "The current files in the workspace are from your previous attempt."
+    )
+    return "\n".join(parts)
+
+
+def ask_claude(llm_client, model, agent_name, task, system_prompt, workspace,
+               feedback=None):
+    """Ask Claude to generate code for a task.
+
+    Args:
+        feedback: Optional string with error/feedback from a previous attempt.
+                  When present, it is appended to the user prompt so Claude
+                  can see what went wrong and fix it.
+    """
     formatted_system = system_prompt.format(agent_name=f"agent-{agent_name}")
 
     # Build context about the workspace
@@ -270,6 +332,10 @@ Respond with ONLY valid JSON (no markdown fences, no explanation) in this format
   "description": "One paragraph explaining what you implemented and why"
 }}"""
 
+    # Append retry feedback if this is a subsequent attempt
+    if feedback:
+        user_prompt += f"\n\n{feedback}"
+
     log(agent_name, f"Asking Claude ({model})...")
     response = llm_client.messages.create(
         model=model,
@@ -287,8 +353,79 @@ Respond with ONLY valid JSON (no markdown fences, no explanation) in this format
     return result["files"], result["description"]
 
 
+MAX_PIPELINE_ATTEMPTS = 3
+MAX_LOCAL_FIX_ATTEMPTS = 2
+
+
+def _write_and_prep_workspace(sdk_client, workspace, files, agent_name):
+    """Write files, install deps, run ruff. Returns ruff status string."""
+    sdk_client.set_phase("writing_files")
+    for filepath, content in files.items():
+        workspace.write(filepath, content)
+        log(agent_name, f"  Wrote: {filepath}")
+
+    # Install dependencies
+    if workspace.exists("requirements.txt"):
+        log(agent_name, "  Installing dependencies (requirements.txt)...")
+        pip_result = workspace.run(
+            "python3 -m pip install -r requirements.txt -q"
+        )
+        if not pip_result.success:
+            log(agent_name, f"  pip install failed: {pip_result.stderr[-200:]}")
+    elif workspace.exists("pyproject.toml"):
+        log(agent_name, "  Installing dependencies (pyproject.toml)...")
+        pip_result = workspace.run("python3 -m pip install -e . -q")
+        if not pip_result.success:
+            log(agent_name, "  editable install failed, trying core deps...")
+            workspace.run(
+                "python3 -m pip install fastapi uvicorn httpx pytest -q"
+            )
+
+    # Run ruff auto-fix before testing/submitting
+    log(agent_name, "  Running ruff auto-fix...")
+    workspace.run("ruff check --fix .")
+    workspace.run("ruff format .")
+    ruff_check = workspace.run("ruff check --output-format=text .")
+    if ruff_check.returncode == 0:
+        log(agent_name, "  Ruff: clean")
+    else:
+        remaining = len([
+            line for line in ruff_check.stdout.splitlines()
+            if line.strip() and not line.startswith("Found")
+        ])
+        log(agent_name, f"  Ruff: {remaining} issues remaining after auto-fix")
+
+
+def _run_local_tests(sdk_client, workspace, agent_name):
+    """Run local tests. Returns (success: bool, output: str)."""
+    sdk_client.set_phase("running_tests")
+    test_env = {}
+    if workspace.exists("src"):
+        test_env["PYTHONPATH"] = str(workspace.path / "src")
+    test_result = workspace.run(
+        "python3 -m pytest -p no:asyncio -x -q",
+        env=test_env,
+    )
+    output = ""
+    if test_result.success:
+        log(agent_name, "  Local tests: PASSED")
+    else:
+        output = (test_result.stdout or "") + "\n" + (test_result.stderr or "")
+        log(agent_name, f"  Local tests: FAILED (exit {test_result.returncode})")
+        log(agent_name, f"  {output[-500:]}")
+    return test_result.success, output
+
+
 def process_task(sdk_client, llm_client, model, agent_name, task_assignment, system_prompt):
-    """Process a single task: claim → write code → submit."""
+    """Process a single task with up to 3 pipeline attempts.
+
+    Each attempt:
+      1. Ask Claude for code (with feedback from prior failures if any)
+      2. Write files, install deps, run ruff --fix
+      3. Run local tests — if they fail, ask Claude to fix (up to 2 local retries)
+      4. Submit to pipeline
+      5. If accepted → done; if rejected → retry with feedback
+    """
     task_id = task_assignment.task_id
 
     # Claim (gets lease + worktree automatically)
@@ -315,114 +452,139 @@ def process_task(sdk_client, llm_client, model, agent_name, task_assignment, sys
     }
 
     workspace = sdk_client.workspace
+    retry_feedback = None  # Feedback string for retry attempts
 
-    # Ask Claude (heartbeat runs in background automatically)
-    try:
-        sdk_client.set_phase("calling_llm")
-        files, description = ask_claude(
-            llm_client, model, agent_name, task_dict, system_prompt, workspace,
-        )
-        log(agent_name, f"Claude produced {len(files)} file(s): {', '.join(files.keys())}")
-    except json.JSONDecodeError as e:
-        log(agent_name, f"Claude returned invalid JSON: {e}")
-        return
-    except Exception as e:
-        log(agent_name, f"LLM error: {e}")
-        return
+    for attempt in range(1, MAX_PIPELINE_ATTEMPTS + 1):
+        log(agent_name, f"--- Attempt {attempt}/{MAX_PIPELINE_ATTEMPTS} ---")
 
-    # Write files to worktree (or build fake diff)
-    if workspace:
-        sdk_client.set_phase("writing_files")
-        for filepath, content in files.items():
-            workspace.write(filepath, content)
-            log(agent_name, f"  Wrote: {filepath}")
-
-        # Install dependencies
-        if workspace.exists("requirements.txt"):
-            log(agent_name, "  Installing dependencies (requirements.txt)...")
-            pip_result = workspace.run(
-                "python3 -m pip install -r requirements.txt -q"
+        # Ask Claude (heartbeat runs in background automatically)
+        try:
+            sdk_client.set_phase("calling_llm")
+            files, description = ask_claude(
+                llm_client, model, agent_name, task_dict, system_prompt,
+                workspace, feedback=retry_feedback,
             )
-            if not pip_result.success:
-                log(agent_name, f"  pip install failed: {pip_result.stderr[-200:]}")
-        elif workspace.exists("pyproject.toml"):
-            log(agent_name, "  Installing dependencies (pyproject.toml)...")
-            pip_result = workspace.run("python3 -m pip install -e . -q")
-            if not pip_result.success:
-                # Try just installing core deps
-                log(agent_name, "  editable install failed, trying core deps...")
-                workspace.run(
-                    "python3 -m pip install fastapi uvicorn httpx pytest -q"
+            log(
+                agent_name,
+                f"Claude produced {len(files)} file(s): {', '.join(files.keys())}",
+            )
+        except json.JSONDecodeError as e:
+            log(agent_name, f"Claude returned invalid JSON: {e}")
+            retry_feedback = format_feedback_for_retry(
+                None, f"Claude returned invalid JSON: {e}"
+            )
+            continue
+        except Exception as e:
+            log(agent_name, f"LLM error: {e}")
+            return  # Non-retryable LLM error (auth, network, etc.)
+
+        if workspace:
+            # Write files and prep workspace
+            _write_and_prep_workspace(sdk_client, workspace, files, agent_name)
+
+            # Run local tests with fix-before-submit loop
+            tests_pass = False
+            local_test_output = ""
+            for local_attempt in range(1, MAX_LOCAL_FIX_ATTEMPTS + 1):
+                tests_pass, local_test_output = _run_local_tests(
+                    sdk_client, workspace, agent_name,
                 )
+                if tests_pass:
+                    break
 
-        # Run ruff auto-fix before testing/submitting
-        log(agent_name, "  Running ruff auto-fix...")
-        ruff_fix = workspace.run("ruff check --fix .")
-        ruff_format = workspace.run("ruff format .")
-        # Check remaining issues
-        ruff_check = workspace.run("ruff check --output-format=text .")
-        if ruff_check.returncode == 0:
-            log(agent_name, "  Ruff: clean")
+                if local_attempt < MAX_LOCAL_FIX_ATTEMPTS:
+                    log(
+                        agent_name,
+                        f"  Local fix attempt {local_attempt}/{MAX_LOCAL_FIX_ATTEMPTS}"
+                        " — asking Claude to fix test failures...",
+                    )
+                    local_fix_feedback = format_feedback_for_retry(
+                        None, local_test_output,
+                    )
+                    try:
+                        sdk_client.set_phase("calling_llm")
+                        files, description = ask_claude(
+                            llm_client, model, agent_name, task_dict,
+                            system_prompt, workspace,
+                            feedback=local_fix_feedback,
+                        )
+                        log(
+                            agent_name,
+                            f"  Claude produced {len(files)} file(s) for fix",
+                        )
+                        _write_and_prep_workspace(
+                            sdk_client, workspace, files, agent_name,
+                        )
+                    except Exception as e:
+                        log(agent_name, f"  LLM fix error: {e}")
+                        break
+
+            # Submit without diff — server generates it from worktree
+            try:
+                sdk_client.set_phase("submitting")
+                feedback = sdk_client.submit_work(
+                    task_id=task_id,
+                    description=description,
+                    files_changed=list(files.keys()),
+                )
+                log(agent_name, f"=> {feedback.status}: {feedback.message}")
+                for s in feedback.suggestions:
+                    log(agent_name, f"   -> {s}")
+
+                if feedback.status == "accepted":
+                    log(agent_name, "Task completed successfully!")
+                    return
+                elif feedback.status == "needs_revision":
+                    log(agent_name, "Task needs human approval — moving on.")
+                    return
+                else:
+                    # Rejected — build feedback for retry
+                    feedback_dict = {
+                        "message": feedback.message,
+                        "suggestions": feedback.suggestions,
+                        "validation_results": feedback.validation_results,
+                    }
+                    retry_feedback = format_feedback_for_retry(
+                        feedback_dict, local_test_output,
+                    )
+                    if attempt < MAX_PIPELINE_ATTEMPTS:
+                        log(agent_name, "Retrying with pipeline feedback...")
+                    continue
+            except Exception as e:
+                log(agent_name, f"Submit error: {e}")
+                return  # Submit errors are not retryable
         else:
-            remaining = len([
-                l for l in ruff_check.stdout.splitlines()
-                if l.strip() and not l.startswith("Found")
-            ])
-            log(agent_name, f"  Ruff: {remaining} issues remaining after auto-fix")
+            # Diff-only mode (no worktree) — no retry loop for this mode
+            sdk_client.set_phase("submitting")
+            diff_parts = []
+            for path, content in files.items():
+                lines = content.split("\n")
+                diff_parts.append(f"diff --git a/{path} b/{path}")
+                diff_parts.append("new file mode 100644")
+                diff_parts.append(f"--- /dev/null")
+                diff_parts.append(f"+++ b/{path}")
+                diff_parts.append(f"@@ -0,0 +1,{len(lines)} @@")
+                for fline in lines:
+                    diff_parts.append(f"+{fline}")
+            diff = "\n".join(diff_parts)
 
-        # Run tests locally first to give quick feedback
-        sdk_client.set_phase("running_tests")
-        # Set PYTHONPATH for src/ layout projects
-        test_env = {}
-        if workspace.exists("src"):
-            test_env["PYTHONPATH"] = str(workspace.path / "src")
-        test_result = workspace.run(
-            "python3 -m pytest -p no:asyncio -x -q",
-            env=test_env,
-        )
-        if test_result.success:
-            log(agent_name, "  Local tests: PASSED")
-        else:
-            log(agent_name, f"  Local tests: FAILED (exit {test_result.returncode})")
-            log(agent_name, f"  {test_result.stdout[-500:]}" if test_result.stdout else "")
+            try:
+                feedback = sdk_client.submit_work(
+                    task_id=task_id,
+                    diff=diff,
+                    description=description,
+                    files_changed=list(files.keys()),
+                )
+                log(agent_name, f"=> {feedback.status}: {feedback.message}")
+            except Exception as e:
+                log(agent_name, f"Submit error: {e}")
+            return  # No retry in diff-only mode
 
-        # Submit without diff — server generates it from worktree
-        try:
-            feedback = sdk_client.submit_work(
-                task_id=task_id,
-                description=description,
-                files_changed=list(files.keys()),
-            )
-            log(agent_name, f"=> {feedback.status}: {feedback.message}")
-            for s in feedback.suggestions:
-                log(agent_name, f"   -> {s}")
-        except Exception as e:
-            log(agent_name, f"Submit error: {e}")
-    else:
-        # Diff-only mode (no worktree)
-        sdk_client.set_phase("submitting")
-        diff_parts = []
-        for path, content in files.items():
-            lines = content.split("\n")
-            diff_parts.append(f"diff --git a/{path} b/{path}")
-            diff_parts.append("new file mode 100644")
-            diff_parts.append(f"--- /dev/null")
-            diff_parts.append(f"+++ b/{path}")
-            diff_parts.append(f"@@ -0,0 +1,{len(lines)} @@")
-            for line in lines:
-                diff_parts.append(f"+{line}")
-        diff = "\n".join(diff_parts)
-
-        try:
-            feedback = sdk_client.submit_work(
-                task_id=task_id,
-                diff=diff,
-                description=description,
-                files_changed=list(files.keys()),
-            )
-            log(agent_name, f"=> {feedback.status}: {feedback.message}")
-        except Exception as e:
-            log(agent_name, f"Submit error: {e}")
+    # All attempts exhausted
+    log(
+        agent_name,
+        f"All {MAX_PIPELINE_ATTEMPTS} attempts failed for task {task_id}. Moving on.",
+    )
 
 
 # ---------------------------------------------------------------------------

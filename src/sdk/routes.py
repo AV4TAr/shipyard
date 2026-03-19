@@ -135,6 +135,9 @@ def list_available_tasks(agent_id: str = None) -> list[TaskAssignment]:
         for task in tasks:
             if task.status != TaskStatus.PENDING:
                 continue
+            # Skip tasks that have exhausted their retry budget
+            if task.retry_count >= task.max_retries:
+                continue
             if task.depends_on:
                 deps_met = all(
                     task_map.get(dep_id) and task_map[dep_id].status == TaskStatus.COMPLETED
@@ -200,11 +203,24 @@ def claim_task(task_id: uuid.UUID, agent_id: Optional[str] = None) -> TaskAssign
             detail="Task belongs to a paused or cancelled project",
         )
 
+    # Check retry budget before claiming
+    task_pre = _find_task(rt, task_id)
+    if task_pre is not None and task_pre.retry_count >= task_pre.max_retries:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Task {task_id} has exhausted its retry budget "
+            f"({task_pre.max_retries} attempts)",
+        )
+
     # Find the task
     try:
         task = rt.goal_manager.update_task_status(task_id, TaskStatus.ASSIGNED)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    # Increment retry count
+    task.retry_count += 1
+    rt.goal_manager._save_task(task)
 
     # Lease management
     lease_info = None
@@ -489,7 +505,19 @@ def submit_work(task_id: uuid.UUID, submission: WorkSubmission) -> FeedbackMessa
     else:
         status = "rejected"
         message = "Work rejected — pipeline failed."
-        rt.goal_manager.update_task_status(task_id, TaskStatus.FAILED)
+        # Reset to PENDING so other agents (or retries) can pick it up,
+        # unless the task has exhausted its retry budget.
+        task_for_reset = _find_task(rt, task_id)
+        if task_for_reset and task_for_reset.retry_count >= task_for_reset.max_retries:
+            rt.goal_manager.update_task_status(task_id, TaskStatus.FAILED)
+        else:
+            rt.goal_manager.update_task_status(task_id, TaskStatus.PENDING)
+        # Release lease on rejection so the task can be re-claimed
+        if rt.lease_manager is not None and submission.agent_id:
+            try:
+                rt.lease_manager.release(task_id, submission.agent_id)
+            except Exception:
+                pass
 
     suggestions = agent_feedback.get("next_actions", [])
 

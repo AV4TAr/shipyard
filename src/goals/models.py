@@ -120,6 +120,10 @@ class AgentTask(BaseModel):
     worktree_path: Optional[str] = None
     branch_name: Optional[str] = None
 
+    # Retry tracking — incremented each time the task is claimed
+    retry_count: int = 0
+    max_retries: int = 5
+
 
 class TaskBreakdown(BaseModel):
     """How a goal gets decomposed into agent-sized work."""
