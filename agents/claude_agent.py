@@ -21,6 +21,7 @@ import os
 import random
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "sdk", "python"))
 
@@ -140,7 +141,27 @@ TOOLS = [
 # ---------------------------------------------------------------------------
 
 
-def execute_tool(workspace, tool_name, tool_input):
+def setup_venv(workspace, agent_name):
+    """Create a venv in the worktree and return the python path."""
+    venv_dir = workspace.path / ".venv"
+    if venv_dir.exists():
+        log(agent_name, "  Venv already exists")
+    else:
+        log(agent_name, "  Creating venv...")
+        result = workspace.run("python3 -m venv .venv")
+        if not result.success:
+            log(agent_name, f"  Venv creation failed: {result.stderr[:200]}")
+            return None
+    # Install base tools in venv
+    venv_pip = str(venv_dir / "bin" / "pip")
+    venv_python = str(venv_dir / "bin" / "python")
+    workspace.run(f"{venv_pip} install --upgrade pip -q")
+    workspace.run(f"{venv_pip} install ruff -q")
+    log(agent_name, "  Venv ready")
+    return venv_python
+
+
+def execute_tool(workspace, tool_name, tool_input, venv_python=None):
     """Execute a tool call and return the result string."""
     if tool_name == "write_file":
         path = tool_input["path"]
@@ -165,6 +186,16 @@ def execute_tool(workspace, tool_name, tool_input):
 
     elif tool_name == "run_command":
         command = tool_input["command"]
+        # Rewrite python3/pip commands to use venv if available
+        if venv_python:
+            venv_bin = str(Path(venv_python).parent)
+            command = command.replace("python3 -m pip", f"{venv_bin}/pip")
+            command = command.replace("python3 -m pytest", f"{venv_python} -m pytest")
+            command = command.replace("python3 -m ", f"{venv_python} -m ")
+            command = command.replace("python3 ", f"{venv_python} ")
+            # ruff should use venv's ruff
+            if command.startswith("ruff "):
+                command = f"{venv_bin}/ruff" + command[4:]
         # Add PYTHONPATH for src/ layouts
         env = {}
         if workspace.exists("src"):
@@ -311,7 +342,7 @@ def fetch_constraints():
 
 
 def run_tool_use_loop(llm_client, model, agent_name, task, system_prompt,
-                      workspace):
+                      workspace, venv_python=None):
     """Run the tool-use conversation loop.
 
     Returns (success: bool, description: str).
@@ -390,7 +421,7 @@ Then call task_complete."""
             elif tool_name == "task_complete":
                 log(agent_name, f"  -> TASK COMPLETE: {tool_input['description'][:80]}")
 
-            result = execute_tool(workspace, tool_name, tool_input)
+            result = execute_tool(workspace, tool_name, tool_input, venv_python)
 
             if result == "TASK_COMPLETE":
                 task_done = True
@@ -448,12 +479,15 @@ def process_task(sdk_client, llm_client, model, agent_name, task_assignment,
         "branch_name": claimed.branch_name,
     }
 
+    # Set up venv in the worktree
+    venv_python = setup_venv(workspace, agent_name)
+
     # Run the tool-use conversation
     sdk_client.set_phase("calling_llm")
     try:
         success, description = run_tool_use_loop(
             llm_client, model, agent_name, task_dict, system_prompt,
-            workspace,
+            workspace, venv_python=venv_python,
         )
     except Exception as e:
         log(agent_name, f"Tool-use loop error: {e}")

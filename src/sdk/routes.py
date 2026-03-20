@@ -512,9 +512,17 @@ def submit_work(task_id: uuid.UUID, submission: WorkSubmission) -> FeedbackMessa
         # unless the task has exhausted its retry budget.
         task_for_reset = _find_task(rt, task_id)
         if task_for_reset and task_for_reset.retry_count >= task_for_reset.max_retries:
-            rt.goal_manager.update_task_status(task_id, TaskStatus.FAILED)
+            task_for_reset.status = TaskStatus.FAILED
+            rt.goal_manager._save_task(task_for_reset)
         else:
-            rt.goal_manager.update_task_status(task_id, TaskStatus.PENDING)
+            if task_for_reset:
+                task_for_reset.status = TaskStatus.PENDING
+                task_for_reset.claimed_by = None
+                task_for_reset.worktree_path = None
+                task_for_reset.branch_name = None
+                rt.goal_manager._save_task(task_for_reset)
+            else:
+                rt.goal_manager.update_task_status(task_id, TaskStatus.PENDING)
         # Release lease on rejection so the task can be re-claimed
         if rt.lease_manager is not None and submission.agent_id:
             try:

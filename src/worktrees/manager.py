@@ -290,6 +290,16 @@ class WorktreeManager:
                 "passed": False,
             }
 
+        # Use venv python if available
+        venv_python = wt / ".venv" / "bin" / "python"
+        if venv_python.exists():
+            test_command = test_command.replace(
+                "python3 -m pytest", f"{venv_python} -m pytest"
+            )
+            test_command = test_command.replace(
+                "python3 ", f"{venv_python} "
+            )
+
         try:
             # Auto-detect src/ layout and set PYTHONPATH
             import os
